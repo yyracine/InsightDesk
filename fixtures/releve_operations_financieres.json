@@ -1,0 +1,47 @@
+[
+  {
+    "reference": "OP-2024-001",
+    "date": "2024-01-10",
+    "tiers": "Client Alpha SA",
+    "categorie": "Prestation Cloud",
+    "montant_eur": 14500.5,
+    "mode_paiement": "Virement",
+    "valide": true
+  },
+  {
+    "reference": "OP-2024-002",
+    "date": "2024-01-18",
+    "tiers": "Fournisseur Beta SAS",
+    "categorie": "Hébergement Datacenter",
+    "montant_eur": 8200.0,
+    "mode_paiement": "Prélèvement",
+    "valide": true
+  },
+  {
+    "reference": "OP-2024-003",
+    "date": "2024-02-05",
+    "tiers": "Client Gamma",
+    "categorie": "Licences Annuelles",
+    "montant_eur": 29800.0,
+    "mode_paiement": "Virement",
+    "valide": true
+  },
+  {
+    "reference": "OP-2024-004",
+    "date": "2024-02-22",
+    "tiers": "Consultant Delta",
+    "categorie": "Audit Cybersécurité",
+    "montant_eur": 12000.0,
+    "mode_paiement": "Virement",
+    "valide": true
+  },
+  {
+    "reference": "OP-2024-005",
+    "date": "2024-03-14",
+    "tiers": "Client Epsilon",
+    "categorie": "Prestation Cloud",
+    "montant_eur": 38400.0,
+    "mode_paiement": "Virement",
+    "valide": true
+  }
+]

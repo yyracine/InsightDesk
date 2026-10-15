@@ -1,0 +1,25 @@
+Date_Operation;Departement;Categorie;Description;Quantite;Montant_HT;Taux_TVA;Montant_TTC;Statut
+2024-01-15;Commercial;Logiciels;Abonnement Cloud ERP;10;25000.00;20.0;30000.00;Payé
+2024-01-22;Technique;Matériel;Serveur Dédié Datacenter;2;18400.00;20.0;22080.00;Payé
+2024-02-10;Conseil;Services;Audit Sécurité Cyber;15;22500.00;20.0;27000.00;Payé
+2024-02-18;Marketing;Logiciels;Licences CRM Marketing;25;12500.00;20.0;15000.00;Payé
+2024-03-05;Technique;Matériel;Renouvellement Postes IT;30;27000.00;20.0;32400.00;Payé
+2024-03-20;Commercial;Logiciels;Extension Cloud ERP Pro;14;35000.00;20.0;42000.00;Payé
+2024-04-12;Ressources Humaines;Formation;Formation Business Intelligence;8;9600.00;20.0;11520.00;Payé
+2024-04-25;Technique;Matériel;Baie Stockage SAN;1;16000.00;20.0;19200.00;Payé
+2024-05-08;Commercial;Logiciels;CRM Analytics & IA;40;20000.00;20.0;24000.00;Payé
+2024-05-22;Conseil;Services;Audit Conformité RGPD;12;18000.00;20.0;21600.00;Payé
+2024-06-14;Technique;Matériel;Serveurs GPU IA;4;27600.00;20.0;33120.00;Payé
+2024-06-29;Commercial;Logiciels;Cloud ERP Pro Enterprise;8;20000.00;20.0;24000.00;Payé
+2024-07-15;Conseil;Services;Audit Infrastructure Cloud;10;15000.00;20.0;18000.00;Payé
+2024-07-28;Commercial;Logiciels;Cloud ERP Pro;12;30000.00;20.0;36000.00;Payé
+2024-08-11;Technique;Matériel;Postes Développeurs;20;18000.00;20.0;21600.00;Payé
+2024-08-26;Marketing;Logiciels;Campagne Ads & Outils;30;15000.00;20.0;18000.00;Payé
+2024-09-09;Technique;Matériel;Cluster Kubernetes;5;23000.00;20.0;27600.00;Payé
+2024-09-23;Ressources Humaines;Formation;Coaching Dirigeants;12;14400.00;20.0;17280.00;Payé
+2024-10-07;Marketing;Logiciels;CRM Analytics;35;17500.00;20.0;21000.00;Payé
+2024-10-21;Commercial;Logiciels;Cloud ERP Pro;16;40000.00;20.0;48000.00;Payé
+2024-11-04;Technique;Matériel;Disques NVMe Entreprise;3;24000.00;20.0;28800.00;Payé
+2024-11-18;Conseil;Services;Audit Pentest Global;20;30000.00;20.0;36000.00;Payé
+2024-12-05;Commercial;Logiciels;Contrat Annuel ERP Grand Compte;22;55000.00;20.0;66000.00;Payé
+2024-12-19;Technique;Matériel;Stations CAO & VR;45;40500.00;20.0;48600.00;Payé
