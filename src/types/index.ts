@@ -200,3 +200,30 @@ export interface AppSettings {
   telemetry_enabled: boolean;
   export_directory?: string;
 }
+
+export type AxisType =
+  | 'commercial_performance'
+  | 'geographic'
+  | 'temporal_trend'
+  | 'profitability_margin'
+  | 'pareto_segmentation'
+  | 'statistical_correlation'
+  | 'risk_and_anomalies'
+  | 'crosstab_multidim';
+
+export interface AnalysisAxis {
+  id: string;
+  type: AxisType;
+  title: string;
+  description: string;
+  iconName: string;
+  dimensionColumn: string;
+  metricColumn: string;
+  secondaryMetricColumn?: string;
+  kpis: { label: string; value: string; hint?: string }[];
+  chartType: 'bar' | 'donut' | 'line' | 'area' | 'matrix';
+  chartData?: any;
+  summaryTable?: { headers: string[]; rows: (string | number)[][] };
+  keyInsights: string[];
+  recommendation: string;
+}

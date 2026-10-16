@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Plus, Sparkles, RefreshCw } from 'lucide-react';
+import { Sun, Moon, Plus, Sparkles, RefreshCw, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Project } from '../../types';
 
 interface HeaderProps {
@@ -12,6 +12,8 @@ interface HeaderProps {
   title: string;
   subtitle?: string;
   isProcessing?: boolean;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,17 +25,34 @@ export const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
   isProcessing = false,
+  isSidebarOpen = true,
+  onToggleSidebar,
 }) => {
   return (
     <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0 select-none">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-100 flex items-center space-x-2">
-          <span>{title}</span>
-          {isProcessing && (
-            <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
-          )}
-        </h2>
-        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+      <div className="flex items-center space-x-3">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors cursor-pointer"
+            title={isSidebarOpen ? "Masquer le menu latéral" : "Afficher le menu latéral"}
+          >
+            {isSidebarOpen ? (
+              <PanelLeftClose className="w-4 h-4 text-slate-400" />
+            ) : (
+              <PanelLeftOpen className="w-4 h-4 text-blue-400" />
+            )}
+          </button>
+        )}
+        <div>
+          <h2 className="text-lg font-semibold text-slate-100 flex items-center space-x-2">
+            <span>{title}</span>
+            {isProcessing && (
+              <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+            )}
+          </h2>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="flex items-center space-x-3">

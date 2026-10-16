@@ -134,6 +134,85 @@ pub fn generate_html_report(
         }
     }
 
+    // 3.5 Correlation Matrix HTML
+    let mut correlation_html = String::new();
+    if !dashboard.correlation_matrix.is_empty() {
+        correlation_html.push_str(
+            r##"<div class="sub-section">
+                <h3>🔗 Matrice des Corrélations Linéaires (Coefficient de Pearson R)</h3>
+                <p style="font-size:12px; color:#64748b; margin-bottom:12px;">Mesure la force et la direction des dépendances statistiques entre variables numériques (-1.0 à +1.0).</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Variable A</th>
+                            <th>Variable B</th>
+                            <th style="text-align: right;">Coefficient R</th>
+                            <th>Interprétation Statistique</th>
+                        </tr>
+                    </thead>
+                    <tbody>"##,
+        );
+        for pair in &dashboard.correlation_matrix {
+            let (badge_style, interp) = if pair.coefficient >= 0.7 {
+                ("background:#dcfce7; color:#15803d;", "Forte corrélation positive (progression conjointe)")
+            } else if pair.coefficient >= 0.3 {
+                ("background:#e0f2fe; color:#0369a1;", "Corrélation positive modérée")
+            } else if pair.coefficient <= -0.7 {
+                ("background:#fee2e2; color:#b91c1c;", "Forte corrélation négative (relation inverse)")
+            } else if pair.coefficient <= -0.3 {
+                ("background:#fef3c7; color:#b45309;", "Corrélation négative modérée")
+            } else {
+                ("background:#f1f5f9; color:#64748b;", "Indépendance linéaire relative")
+            };
+            correlation_html.push_str(&format!(
+                r##"<tr>
+                    <td><strong>{}</strong></td>
+                    <td><strong>{}</strong></td>
+                    <td style="text-align: right;"><span class="badge" style="{}">{:+.2}</span></td>
+                    <td style="font-size:12px; color:#475569;">{}</td>
+                </tr>"##,
+                pair.column_a, pair.column_b, badge_style, pair.coefficient, interp
+            ));
+        }
+        correlation_html.push_str("</tbody></table></div>");
+    }
+
+    // 3.6 CrossTab HTML
+    let mut crosstab_html = String::new();
+    if let Some(ct_chart) = dashboard.charts.iter().find(|c| c.cross_tab_data.is_some()) {
+        if let Some(ref ct) = ct_chart.cross_tab_data {
+            crosstab_html.push_str(&format!(
+                r##"<div class="sub-section">
+                    <h3>🔀 Tableau Croisé Dynamique : {row} × {col} ({metric})</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>{row} \ {col}</th>"##,
+                row = ct.row_dimension,
+                col = ct.col_dimension,
+                metric = ct.metric_column
+            ));
+            for col_h in &ct.all_col_headers {
+                crosstab_html.push_str(&format!(r##"<th style="text-align: right;">{}</th>"##, col_h));
+            }
+            crosstab_html.push_str(r##"</tr></thead><tbody>"##);
+
+            let mut row_names = std::collections::BTreeSet::new();
+            for cell in &ct.cells {
+                row_names.insert(&cell.row_dim);
+            }
+            for r_name in row_names {
+                crosstab_html.push_str(&format!(r##"<tr><td><strong>{}</strong></td>"##, r_name));
+                for col_h in &ct.all_col_headers {
+                    let cell_val = ct.cells.iter().find(|c| &c.row_dim == r_name && &c.col_dim == col_h).map(|c| c.value).unwrap_or(0.0);
+                    crosstab_html.push_str(&format!(r##"<td style="text-align: right;">{:.2}</td>"##, cell_val));
+                }
+                crosstab_html.push_str("</tr>");
+            }
+            crosstab_html.push_str("</tbody></table></div>");
+        }
+    }
+
     // 4. Strategic Insights HTML
     let mut insights_html = String::new();
     for ins in &dashboard.insights {
@@ -360,12 +439,16 @@ pub fn generate_html_report(
         {temporal_section}
         {categorical_section}
 
-        <div class="section-title">3. Analyses Déterministes & Recommandations</div>
+        <div class="section-title">3. Analyses des Corrélations & Dépendances Statistiques</div>
+        {correlation_section}
+        {crosstab_section}
+
+        <div class="section-title">4. Analyses Déterministes & Recommandations Stratégiques</div>
         <div class="insights-container">
             {insights}
         </div>
 
-        <div class="section-title">4. Échantillon des Données Validées (25 premières lignes)</div>
+        <div class="section-title">5. Échantillon des Données Validées (25 premières lignes)</div>
         <div style="overflow-x: auto;">
             <table>
                 <thead>
@@ -393,6 +476,8 @@ pub fn generate_html_report(
         kpis = kpi_cards_html,
         temporal_section = temporal_html,
         categorical_section = categorical_html,
+        correlation_section = correlation_html,
+        crosstab_section = crosstab_html,
         insights = insights_html,
         headers = table_headers_html,
         rows = table_rows_html

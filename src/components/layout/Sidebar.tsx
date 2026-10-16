@@ -11,6 +11,7 @@ import {
   Settings,
   Sparkles,
   Database,
+  PanelLeftClose,
 } from 'lucide-react';
 import { Project } from '../../types';
 
@@ -29,12 +30,14 @@ interface SidebarProps {
   activeTab: NavigationTab;
   onTabChange: (tab: NavigationTab) => void;
   activeProject: Project | null;
+  onToggleCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   activeProject,
+  onToggleCollapse,
 }) => {
   const navItems = [
     { id: 'projects' as NavigationTab, label: 'Accueil & Projets', icon: FolderKanban },
@@ -65,6 +68,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </div>
         </div>
+
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Masquer le menu latéral"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Active Project Banner */}

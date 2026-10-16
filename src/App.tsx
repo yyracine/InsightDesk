@@ -9,6 +9,7 @@ import {
   DocumentItem,
   Project,
   SortCriterion,
+  AnalysisAxis,
 } from './types';
 import { Sidebar, NavigationTab } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -29,6 +30,7 @@ export const App: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState | null>(null);
+  const [analysisAxes, setAnalysisAxes] = useState<AnalysisAxis[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'dark',
     language: 'fr',
@@ -38,6 +40,7 @@ export const App: React.FC = () => {
     telemetry_enabled: false,
   });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Initialize projects and settings on mount
   useEffect(() => {
@@ -252,12 +255,15 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
-      {/* Left Sidebar */}
-      <Sidebar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        activeProject={activeProject}
-      />
+      {/* Left Sidebar (Toggleable) */}
+      {isSidebarOpen && (
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          activeProject={activeProject}
+          onToggleCollapse={() => setIsSidebarOpen(false)}
+        />
+      )}
 
       {/* Main Right Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
@@ -275,6 +281,8 @@ export const App: React.FC = () => {
             activeProject ? `Projet : ${activeProject.name}` : 'Aucun projet sélectionné'
           }
           isProcessing={isProcessing}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
 
         {/* Dynamic Body Content */}
@@ -317,6 +325,8 @@ export const App: React.FC = () => {
               dataset={dataset}
               dashboardState={dashboardState}
               currency={settings.currency}
+              analysisAxes={analysisAxes}
+              onAxesChange={setAnalysisAxes}
               onApplyFilters={handleApplyFilters}
               onResetFilters={handleResetFilters}
               onExportReport={() => setActiveTab('reports')}
@@ -370,6 +380,7 @@ export const App: React.FC = () => {
               dataset={dataset}
               dashboardState={dashboardState}
               currency={settings.currency}
+              analysisAxes={analysisAxes}
               onExportHtml={() => {
                 if (!activeProject) throw new Error('Aucun projet.');
                 return api.exportProjectReportHtml(activeProject.id);

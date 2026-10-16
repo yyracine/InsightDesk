@@ -28,6 +28,7 @@ import {
   KpiCard,
   CategoricalDataPoint,
   TemporalDataPoint,
+  AnalysisAxis,
 } from '../../types';
 import { FilterBar } from './FilterBar';
 import { KpiWidget } from '../../components/charts/KpiWidget';
@@ -36,6 +37,7 @@ import { DistributionChart } from '../../components/charts/DistributionChart';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { CrossTabMatrix } from '../../components/charts/CrossTabMatrix';
 import { CorrelationMatrix } from '../../components/charts/CorrelationMatrix';
+import { MultiAxisAnalysis } from '../analysis/MultiAxisAnalysis';
 
 interface DashboardViewProps {
   project: Project | null;
@@ -46,6 +48,8 @@ interface DashboardViewProps {
   onResetFilters: () => void;
   onExportReport: () => void;
   onDrillDown: (field?: string, value?: string) => void;
+  analysisAxes?: AnalysisAxis[];
+  onAxesChange?: (axes: AnalysisAxis[]) => void;
 }
 
 // Strict ID column detector: filters out any opaque or technical identifier
@@ -250,7 +254,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onResetFilters,
   onExportReport,
   onDrillDown,
+  analysisAxes = [],
+  onAxesChange = () => {},
 }) => {
+  // View mode switcher: standard dashboard vs multi-axis analysis builder
+  const [activeTabMode, setActiveTabMode] = useState<'standard' | 'multi_axis'>('standard');
+
   // Local list of charts and KPIs so user can add, edit, or remove them dynamically
   const [charts, setCharts] = useState<ChartWidgetConfig[]>([]);
   const [kpis, setKpis] = useState<KpiCard[]>([]);
@@ -524,14 +533,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        {/* View Mode Switcher: Vue Standard vs Analyses Multi-Axes */}
+        <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
           <button
-            onClick={openAddChartModal}
-            className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+            onClick={() => setActiveTabMode('standard')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+              activeTabMode === 'standard'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            <span>Ajouter un Graphique</span>
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Vue Standard BI</span>
           </button>
+          <button
+            onClick={() => setActiveTabMode('multi_axis')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+              activeTabMode === 'multi_axis'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Analyses Multi-Axes</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-blue-300 font-mono font-bold">
+              {analysisAxes.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {activeTabMode === 'standard' && (
+            <button
+              onClick={openAddChartModal}
+              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Ajouter un Graphique</span>
+            </button>
+          )}
 
           <button
             onClick={onExportReport}
@@ -554,8 +594,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         filteredRows={dashboardState.filtered_rows_count}
       />
 
-      {/* Section 1: KPI Cards */}
-      <div className="space-y-3">
+      {activeTabMode === 'multi_axis' ? (
+        <MultiAxisAnalysis
+          dataset={dataset}
+          dashboardState={dashboardState}
+          currency={currency}
+          activeAxes={analysisAxes}
+          onAxesChange={onAxesChange}
+        />
+      ) : (
+        <>
+          {/* Section 1: KPI Cards */}
+          <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
@@ -806,6 +856,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Multi-Axis Analysis Call-to-action banner */}
+      <div className="p-6 bg-gradient-to-r from-blue-950/40 via-slate-900 to-indigo-950/30 border border-blue-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg">
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-white flex items-center space-x-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Générer des Analyses Multi-Axes Stratégiques</span>
+          </h4>
+          <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
+            Choisissez parmi nos 8 axes suggérés (Performance Commerciale, Territoires, Évolution Temporelle, Marges, Pareto 80/20, Anomalies, Analyses Croisées) pour empiler plusieurs analyses structurées les unes sous les autres et enrichir vos rapports.
+          </p>
+        </div>
+        <button
+          onClick={() => setActiveTabMode('multi_axis')}
+          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center space-x-2 transition-all shadow-md shadow-blue-600/30 cursor-pointer"
+        >
+          <span>Accéder aux Analyses Multi-Axes</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/40 text-white font-mono font-bold">
+            {analysisAxes.length}
+          </span>
+        </button>
+      </div>
+    </>
+  )}
 
       {/* Modal: Ajouter un Graphique Personnalisé */}
       {isAddChartOpen && (

@@ -46,7 +46,7 @@ pub fn answer_query_locally(
     let mut sources = vec![format!("Jeu de données : {}", dataset.name)];
 
     // 1. Question asking for summary / résumé
-    if q_lower.contains("résume") || q_lower.contains("resume") || q_lower.contains("synthèse") || q_lower.contains("synthese") {
+    if q_lower.contains("résume") || q_lower.contains("resume") || q_lower.contains("synthèse") || q_lower.contains("synthese") || q_lower.contains("enseignement") || q_lower.contains("bilan") || q_lower.contains("global") {
         let mut summary = format!(
             "### Synthèse déterministe du document '{}'\n\n",
             dataset.name
@@ -84,7 +84,7 @@ pub fn answer_query_locally(
     }
 
     // 2. Question asking for Top elements / classement
-    if q_lower.contains("top") || q_lower.contains("plus important") || q_lower.contains("classement") || q_lower.contains("meilleur") {
+    if q_lower.contains("top") || q_lower.contains("plus important") || q_lower.contains("classement") || q_lower.contains("meilleur") || q_lower.contains("catégorie") || q_lower.contains("categorie") {
         if let Some((c_idx, c_col)) = cat_col {
             let m_idx_opt = metric_col.map(|(i, _)| i);
             let top_cats = aggregate_categorical(c_idx, m_idx_opt, &dataset.rows, 5);
@@ -107,7 +107,7 @@ pub fn answer_query_locally(
     }
 
     // 3. Question asking for Anomalies / Outliers / Risques
-    if q_lower.contains("anomalie") || q_lower.contains("atypique") || q_lower.contains("risque") || q_lower.contains("attention") {
+    if q_lower.contains("anomalie") || q_lower.contains("atypique") || q_lower.contains("risque") || q_lower.contains("attention") || q_lower.contains("alerte") || q_lower.contains("écart") {
         let mut anomaly_found = false;
         let mut resp = "### Analyse des anomalies statistiques et des risques :\n\n".to_string();
 
@@ -149,7 +149,7 @@ pub fn answer_query_locally(
     }
 
     // 4. Question asking for comparison or evolution / comparaison / période
-    if q_lower.contains("compar") || q_lower.contains("evolution") || q_lower.contains("évolution") || q_lower.contains("periode") || q_lower.contains("période") {
+    if q_lower.contains("compar") || q_lower.contains("evolution") || q_lower.contains("évolution") || q_lower.contains("periode") || q_lower.contains("période") || q_lower.contains("temporelle") || q_lower.contains("tendance") || q_lower.contains("croissance") {
         if let Some((d_idx, d_col)) = date_col {
             let m_idx_opt = metric_col.map(|(i, _)| i);
             let pts = aggregate_temporal(d_idx, m_idx_opt, &dataset.rows);
