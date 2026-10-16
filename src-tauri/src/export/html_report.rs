@@ -51,22 +51,27 @@ pub fn generate_html_report(
         ));
     }
 
-    // 2. Temporal Analysis Table HTML (if available)
+    // 2. Temporal Analysis Section with Visual SVG Chart HTML
     let mut temporal_html = String::new();
     if let Some(temp_chart) = dashboard.charts.iter().find(|c| c.temporal_data.is_some()) {
         if let Some(ref pts) = temp_chart.temporal_data {
-            temporal_html.push_str(r#"<div class="sub-section">
-                <h3>Chronologie & Évolutions Périodiques</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Période</th>
-                            <th style="text-align: right;">Valeur Consolidée</th>
-                            <th style="text-align: right;">Nombre d'Opérations</th>
-                            <th style="text-align: right;">Variation Périodique</th>
-                        </tr>
-                    </thead>
-                    <tbody>"#);
+            let svg_trend = render_svg_trend_chart(pts, &temp_chart.title, resolved_currency);
+            temporal_html.push_str(&format!(
+                r#"<div class="sub-section">
+                    <h3>Chronologie & Évolutions Périodiques</h3>
+                    {svg}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Période</th>
+                                <th style="text-align: right;">Valeur Consolidée</th>
+                                <th style="text-align: right;">Nombre d'Opérations</th>
+                                <th style="text-align: right;">Variation Périodique</th>
+                            </tr>
+                        </thead>
+                        <tbody>"#,
+                svg = svg_trend
+            ));
             for p in pts {
                 let gr_str = match p.growth_rate {
                     Some(g) if g > 0.0 => format!("<span style='color: #10b981; font-weight: 600;'>+{} %</span>", g),
@@ -88,22 +93,32 @@ pub fn generate_html_report(
         }
     }
 
-    // 3. Categorical Distribution Table HTML (if available)
+    // 3. Categorical Distribution Section with Visual SVG Donut & Bar Charts
     let mut categorical_html = String::new();
     if let Some(cat_chart) = dashboard.charts.iter().find(|c| c.categorical_data.is_some()) {
         if let Some(ref pts) = cat_chart.categorical_data {
-            categorical_html.push_str(r#"<div class="sub-section">
-                <h3>Répartition par Segments d'Activité & Pareto</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Catégorie / Segment</th>
-                            <th style="text-align: right;">Volume Consolidé</th>
-                            <th style="text-align: right;">Part Relative (%)</th>
-                            <th style="text-align: right;">Enregistrements</th>
-                        </tr>
-                    </thead>
-                    <tbody>"#);
+            let svg_donut = render_svg_donut_chart(pts, &cat_chart.title);
+            let svg_bar = render_svg_bar_chart(pts, &cat_chart.title, resolved_currency);
+            categorical_html.push_str(&format!(
+                r#"<div class="sub-section">
+                    <h3>Répartition par Segments d'Activité & Graphiques Décisionnels</h3>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                        <div>{donut}</div>
+                        <div>{bar}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Catégorie / Segment</th>
+                                <th style="text-align: right;">Volume Consolidé</th>
+                                <th style="text-align: right;">Part Relative (%)</th>
+                                <th style="text-align: right;">Enregistrements</th>
+                            </tr>
+                        </thead>
+                        <tbody>"#,
+                donut = svg_donut,
+                bar = svg_bar
+            ));
             for p in pts {
                 categorical_html.push_str(&format!(
                     r#"<tr>
@@ -381,5 +396,216 @@ pub fn generate_html_report(
         insights = insights_html,
         headers = table_headers_html,
         rows = table_rows_html
+    )
+}
+
+fn render_svg_trend_chart(
+    pts: &[crate::models::TemporalDataPoint],
+    metric_name: &str,
+    currency: &str,
+) -> String {
+    if pts.is_empty() {
+        return String::new();
+    }
+
+    let w = 780.0;
+    let h = 220.0;
+    let pad_l = 60.0;
+    let pad_r = 30.0;
+    let pad_t = 30.0;
+    let pad_b = 40.0;
+
+    let chart_w = w - pad_l - pad_r;
+    let chart_h = h - pad_t - pad_b;
+
+    let max_val = pts.iter().map(|p| p.value).fold(0.0, f64::max).max(1.0);
+    let min_val = 0.0;
+
+    let n = pts.len();
+    let x_step = if n > 1 {
+        chart_w / ((n - 1) as f64)
+    } else {
+        chart_w / 2.0
+    };
+
+    let mut points_str = String::new();
+    let mut area_points = format!("{},{} ", pad_l, pad_t + chart_h);
+    let mut dots_svg = String::new();
+    let mut labels_svg = String::new();
+
+    for (i, p) in pts.iter().enumerate() {
+        let x = pad_l + (i as f64) * x_step;
+        let y_ratio = (p.value - min_val) / (max_val - min_val);
+        let y = pad_t + chart_h - (y_ratio * chart_h);
+
+        points_str.push_str(&format!("{:.1},{:.1} ", x, y));
+        area_points.push_str(&format!("{:.1},{:.1} ", x, y));
+
+        dots_svg.push_str(&format!(
+            r##"<circle cx="{:.1}" cy="{:.1}" r="4" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+               <text x="{:.1}" y="{:.1}" font-size="10" font-weight="600" fill="#1e293b" text-anchor="middle">{:.0}</text>"##,
+            x,
+            y,
+            x,
+            y - 8.0,
+            p.value
+        ));
+
+        labels_svg.push_str(&format!(
+            r##"<text x="{:.1}" y="{:.1}" font-size="10.5" fill="#64748b" text-anchor="middle">{}</text>"##,
+            x,
+            pad_t + chart_h + 18.0,
+            p.period
+        ));
+    }
+
+    area_points.push_str(&format!("{},{} ", pad_l + ((n - 1) as f64) * x_step, pad_t + chart_h));
+
+    format!(
+        r##"<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:16px;">
+            <div style="font-size:13px; font-weight:700; color:#1e293b; margin-bottom:8px;">📈 Évolution Chronologique : {metric} ({currency})</div>
+            <svg width="100%" height="{h}" viewBox="0 0 {w} {h}" style="overflow:visible;">
+                <defs>
+                    <linearGradient id="trendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35"/>
+                        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/>
+                    </linearGradient>
+                </defs>
+                <line x1="{pad_l}" y1="{pad_t}" x2="{w_r}" y2="{pad_t}" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="{pad_l}" y1="{mid_y}" x2="{w_r}" y2="{mid_y}" stroke="#f1f5f9" stroke-width="1"/>
+                <line x1="{pad_l}" y1="{bot_y}" x2="{w_r}" y2="{bot_y}" stroke="#cbd5e1" stroke-width="1.5"/>
+                <polygon points="{area_points}" fill="url(#trendGrad)"/>
+                <polyline points="{points_str}" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                {dots_svg}
+                {labels_svg}
+            </svg>
+        </div>"##,
+        metric = metric_name,
+        currency = currency,
+        h = h,
+        w = w,
+        pad_l = pad_l,
+        pad_t = pad_t,
+        w_r = w - pad_r,
+        mid_y = pad_t + chart_h / 2.0,
+        bot_y = pad_t + chart_h,
+        area_points = area_points,
+        points_str = points_str,
+        dots_svg = dots_svg,
+        labels_svg = labels_svg
+    )
+}
+
+fn render_svg_donut_chart(pts: &[crate::models::CategoricalDataPoint], title: &str) -> String {
+    if pts.is_empty() {
+        return String::new();
+    }
+
+    let colors = [
+        "#2563eb", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#64748b",
+    ];
+    let r = 58.0;
+    let circ = 2.0 * std::f64::consts::PI * r;
+
+    let mut slices_svg = String::new();
+    let mut legend_html = String::new();
+    let mut accumulated_pct = 0.0;
+
+    for (i, p) in pts.iter().take(7).enumerate() {
+        let color = colors[i % colors.len()];
+        let pct = p.percentage.max(0.0);
+        let stroke_len = (pct / 100.0) * circ;
+        let stroke_offset = -(accumulated_pct / 100.0) * circ;
+
+        slices_svg.push_str(&format!(
+            r##"<circle cx="80" cy="80" r="{r}" fill="transparent" stroke="{color}" stroke-width="26"
+                stroke-dasharray="{len:.2} {gap:.2}" stroke-dashoffset="{offset:.2}"
+                transform="rotate(-90 80 80)"/>"##,
+            r = r,
+            color = color,
+            len = stroke_len,
+            gap = circ - stroke_len,
+            offset = stroke_offset
+        ));
+
+        legend_html.push_str(&format!(
+            r##"<div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; margin-bottom:5px;">
+                <span style="display:flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:{color};"></span>
+                    <span style="color:#1e293b; font-weight:600;">{cat}</span>
+                </span>
+                <span style="font-weight:700; color:#475569; font-mono;">{pct:.1}%</span>
+            </div>"##,
+            color = color,
+            cat = p.category,
+            pct = p.percentage
+        ));
+
+        accumulated_pct += pct;
+    }
+
+    format!(
+        r##"<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:16px;">
+            <div style="font-size:13px; font-weight:700; color:#1e293b; margin-bottom:12px;">🥧 Répartition Relative : {title}</div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:24px;">
+                <svg width="160" height="160" viewBox="0 0 160 160" style="flex-shrink:0;">
+                    {slices_svg}
+                    <text x="80" y="78" font-size="12" font-weight="700" fill="#0f172a" text-anchor="middle">Parts</text>
+                    <text x="80" y="94" font-size="10" fill="#64748b" text-anchor="middle">100%</text>
+                </svg>
+                <div style="flex:1; min-width:180px;">
+                    {legend_html}
+                </div>
+            </div>
+        </div>"##,
+        title = title,
+        slices_svg = slices_svg,
+        legend_html = legend_html
+    )
+}
+
+fn render_svg_bar_chart(
+    pts: &[crate::models::CategoricalDataPoint],
+    title: &str,
+    currency: &str,
+) -> String {
+    if pts.is_empty() {
+        return String::new();
+    }
+
+    let colors = ["#2563eb", "#3b82f6", "#60a5fa", "#93c5fd"];
+    let mut bars_html = String::new();
+    let max_val = pts.iter().map(|p| p.value).fold(0.0, f64::max).max(1.0);
+
+    for (i, p) in pts.iter().take(6).enumerate() {
+        let pct_width = ((p.value / max_val) * 100.0).clamp(2.0, 100.0);
+        let color = colors[i.min(colors.len() - 1)];
+
+        bars_html.push_str(&format!(
+            r##"<div style="margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+                    <span style="font-weight:600; color:#1e293b;">{cat}</span>
+                    <span style="font-weight:700; color:#0f172a;">{val:.2} {cur} ({pct:.1}%)</span>
+                </div>
+                <div style="background:#f1f5f9; height:10px; border-radius:5px; overflow:hidden;">
+                    <div style="background:{color}; width:{w:.1}%; height:100%; border-radius:5px;"></div>
+                </div>
+            </div>"##,
+            cat = p.category,
+            val = p.value,
+            cur = currency,
+            pct = p.percentage,
+            color = color,
+            w = pct_width
+        ));
+    }
+
+    format!(
+        r##"<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-bottom:16px;">
+            <div style="font-size:13px; font-weight:700; color:#1e293b; margin-bottom:12px;">📊 Analyse Comparative par Volume : {title}</div>
+            {bars}
+        </div>"##,
+        title = title,
+        bars = bars_html
     )
 }

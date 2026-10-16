@@ -316,6 +316,7 @@ export const App: React.FC = () => {
               project={activeProject}
               dataset={dataset}
               dashboardState={dashboardState}
+              currency={settings.currency}
               onApplyFilters={handleApplyFilters}
               onResetFilters={handleResetFilters}
               onExportReport={() => setActiveTab('reports')}

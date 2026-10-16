@@ -24,6 +24,26 @@ interface FilterBarProps {
   filteredRows: number;
 }
 
+const isIdColumn = (col: ColumnSchema) => {
+  if (col.inferred_type === 'Identifier' || col.semantic_type === 'EntityId') return true;
+  if (col.custom_role === 'ignored' || col.custom_role === 'id') return true;
+  const lower = col.name.toLowerCase().trim();
+  return (
+    lower === 'id' ||
+    lower.startsWith('id_') ||
+    lower.endsWith('_id') ||
+    lower.startsWith('id ') ||
+    lower.endsWith(' id') ||
+    lower.includes('client_id') ||
+    lower.includes('id_client') ||
+    lower.includes('id client') ||
+    lower.includes('code_client') ||
+    lower.includes('matricule') ||
+    lower.includes('uuid') ||
+    lower.includes('row_id')
+  );
+};
+
 export const FilterBar: React.FC<FilterBarProps> = ({
   columns,
   activeFilters,
@@ -33,7 +53,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   totalRows,
   filteredRows,
 }) => {
-  const usableColumns = columns.filter((c) => c.is_selected !== false);
+  const usableColumns = columns.filter((c) => c.is_selected !== false && !isIdColumn(c));
   const [selectedColumn, setSelectedColumn] = useState<string>(
     usableColumns.find((c) => c.inferred_type === 'Categorical' || c.inferred_type === 'Text')?.name ||
       usableColumns[0]?.name ||
@@ -46,8 +66,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   const [isSortSectionOpen, setIsSortSectionOpen] = useState<boolean>(sortCriteria.length > 0);
 
   useEffect(() => {
-    setSortList(sortCriteria);
-    if (sortCriteria.length > 0) {
+    if (sortCriteria && sortCriteria.length > 0) {
+      setSortList(sortCriteria);
       setIsSortSectionOpen(true);
     }
   }, [sortCriteria]);

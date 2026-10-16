@@ -15,6 +15,9 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { DashboardState, Dataset, Project } from '../../types';
+import { TrendChart } from '../../components/charts/TrendChart';
+import { DistributionChart } from '../../components/charts/DistributionChart';
+import { DonutChart } from '../../components/charts/DonutChart';
 
 interface ReportsViewProps {
   project: Project | null;
@@ -276,13 +279,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 2: Temporal Evolution Table */}
+        {/* Section 2: Temporal Evolution Table & Visual Chart */}
         {temporalChart && temporalChart.temporal_data && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
               <Calendar className="w-4 h-4 text-blue-400" />
-              <span>2. Évolutions Périodiques & Variations</span>
+              <span>2. Évolutions Périodiques & Variations (Visualisation & Données)</span>
             </h3>
+
+            {/* Visual Trend Chart */}
+            <div className="rounded-xl overflow-hidden border border-slate-800">
+              <TrendChart
+                title={temporalChart.title}
+                description={temporalChart.description}
+                data={temporalChart.temporal_data}
+                metricName={temporalChart.y_axis[0] || 'Valeur'}
+              />
+            </div>
 
             <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
               <table className="w-full text-xs text-left">
@@ -321,13 +334,34 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         )}
 
-        {/* Section 3: Categorical Breakdown Table */}
+        {/* Section 3: Categorical Breakdown Table & Visual Charts (Barres & Camembert) */}
         {categoricalChart && categoricalChart.categorical_data && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
               <PieChart className="w-4 h-4 text-blue-400" />
-              <span>3. Répartition par Segments d'Activité (Pareto)</span>
+              <span>3. Répartition par Segments d'Activité (Barres & Camembert)</span>
             </h3>
+
+            {/* Visual Charts: Side-by-side Bar chart & Donut (Camembert) chart */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-xl overflow-hidden border border-slate-800">
+                <DistributionChart
+                  title={`Distribution par ${categoricalChart.x_axis || 'Catégorie'}`}
+                  description="Volumes et parts relatives par catégorie"
+                  data={categoricalChart.categorical_data}
+                  metricName={categoricalChart.y_axis[0] || 'Valeur'}
+                />
+              </div>
+
+              <div className="rounded-xl overflow-hidden border border-slate-800">
+                <DonutChart
+                  title={`Répartition Circulaire (Camembert)`}
+                  description="Parts de marché et contributions relatives"
+                  data={categoricalChart.categorical_data}
+                  metricName={categoricalChart.y_axis[0] || 'Valeur'}
+                />
+              </div>
+            </div>
 
             <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
               <table className="w-full text-xs text-left">

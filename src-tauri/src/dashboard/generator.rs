@@ -39,6 +39,26 @@ pub fn generate_smart_dashboard(
 
     let total_rows = rows.len();
 
+    let is_id_name = |name: &str| -> bool {
+        let lower = name.to_lowercase();
+        lower == "id"
+            || lower.starts_with("id_")
+            || lower.ends_with("_id")
+            || lower.contains("client_id")
+            || lower.contains("id_client")
+            || lower.contains("id client")
+            || lower.contains("code_client")
+            || lower.contains("code client")
+            || lower.contains("ref_client")
+            || lower.contains("num_client")
+            || lower.contains("identifiant")
+            || lower.contains("identifier")
+            || lower.contains("uuid")
+            || lower.contains("guid")
+            || lower.contains("matricule")
+            || lower.contains("row_id")
+    };
+
     let is_col_usable = |c: &ColumnSchema| -> bool {
         if !c.is_selected {
             return false;
@@ -50,24 +70,9 @@ pub fn generate_smart_dashboard(
         }
         if c.semantic_type == SemanticType::EntityId
             || c.inferred_type == InferredColumnType::Identifier
+            || is_id_name(&c.name)
         {
             return false;
-        }
-        let lower = c.name.to_lowercase();
-        if lower == "id"
-            || lower.starts_with("id_")
-            || lower.ends_with("_id")
-            || lower.contains("client_id")
-            || lower.contains("id_client")
-            || lower.contains("id client")
-            || lower.contains("uuid")
-            || lower.contains("matricule")
-        {
-            if c.custom_role.as_deref() != Some("metric")
-                && c.custom_role.as_deref() != Some("dimension")
-            {
-                return false;
-            }
         }
         true
     };

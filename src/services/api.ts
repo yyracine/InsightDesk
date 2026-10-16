@@ -637,6 +637,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         total_rows: ds.rows.length,
         filtered_rows_count: filtered.length,
         active_filters: activeFilters,
+        sort_criteria: sortCriteria,
         kpis,
         charts,
         insights,
@@ -686,6 +687,50 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         `;
       }
 
+      // Generate SVG charts for mock export
+      const barSvg = `
+        <svg viewBox="0 0 540 220" width="100%" height="200" xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:10px;padding:15px;font-family:sans-serif;">
+          <text x="20" y="25" fill="#f8fafc" font-size="13" font-weight="bold">Distribution par Catégorie</text>
+          <line x1="120" y1="40" x2="120" y2="180" stroke="#334155" stroke-width="1"/>
+          <g transform="translate(0, 50)">
+            <text x="110" y="15" fill="#94a3b8" font-size="11" text-anchor="end">Logiciels SaaS</text>
+            <rect x="125" y="5" width="280" height="16" rx="4" fill="#3b82f6"/>
+            <text x="415" y="17" fill="#60a5fa" font-size="11" font-weight="bold">52.4%</text>
+          </g>
+          <g transform="translate(0, 85)">
+            <text x="110" y="15" fill="#94a3b8" font-size="11" text-anchor="end">Matériel IT</text>
+            <rect x="125" y="5" width="180" height="16" rx="4" fill="#10b981"/>
+            <text x="315" y="17" fill="#34d399" font-size="11" font-weight="bold">31.2%</text>
+          </g>
+          <g transform="translate(0, 120)">
+            <text x="110" y="15" fill="#94a3b8" font-size="11" text-anchor="end">Services & Conseil</text>
+            <rect x="125" y="5" width="95" height="16" rx="4" fill="#f59e0b"/>
+            <text x="230" y="17" fill="#fbbf24" font-size="11" font-weight="bold">16.4%</text>
+          </g>
+        </svg>
+      `;
+
+      const donutSvg = `
+        <svg viewBox="0 0 540 220" width="100%" height="200" xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:10px;padding:15px;font-family:sans-serif;">
+          <text x="20" y="25" fill="#f8fafc" font-size="13" font-weight="bold">Répartition Relative (Camembert / Donut)</text>
+          <g transform="translate(130, 115)">
+            <circle cx="0" cy="0" r="60" fill="transparent" stroke="#1e293b" stroke-width="26"/>
+            <circle cx="0" cy="0" r="60" fill="transparent" stroke="#3b82f6" stroke-width="26" stroke-dasharray="197 180" stroke-dashoffset="0"/>
+            <circle cx="0" cy="0" r="60" fill="transparent" stroke="#10b981" stroke-width="26" stroke-dasharray="117 260" stroke-dashoffset="-197"/>
+            <circle cx="0" cy="0" r="60" fill="transparent" stroke="#f59e0b" stroke-width="26" stroke-dasharray="63 314" stroke-dashoffset="-314"/>
+            <text x="0" y="5" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">100%</text>
+          </g>
+          <g transform="translate(260, 60)" font-size="12">
+            <circle cx="10" cy="10" r="6" fill="#3b82f6"/>
+            <text x="25" y="14" fill="#cbd5e1">Logiciels SaaS : <tspan fill="#3b82f6" font-weight="bold">52.4%</tspan></text>
+            <circle cx="10" cy="40" r="6" fill="#10b981"/>
+            <text x="25" y="44" fill="#cbd5e1">Matériel IT : <tspan fill="#10b981" font-weight="bold">31.2%</tspan></text>
+            <circle cx="10" cy="70" r="6" fill="#f59e0b"/>
+            <text x="25" y="74" fill="#cbd5e1">Services & Conseil : <tspan fill="#f59e0b" font-weight="bold">16.4%</tspan></text>
+          </g>
+        </svg>
+      `;
+
       let rowsHtml = '';
       if (ds) {
         for (const r of ds.rows.slice(0, 25)) {
@@ -712,6 +757,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         .kpi-title { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
         .kpi-value { font-size: 24px; font-weight: 800; color: #0f172a; }
         .kpi-desc { font-size: 12px; color: #64748b; margin-top: 8px; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
         table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; background: #ffffff; border: 1px solid #e2e8f0; }
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
         th { background: #f1f5f9; color: #475569; font-weight: 700; font-size: 11.5px; text-transform: uppercase; }
@@ -738,7 +784,13 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
             ${kpisHtml}
         </div>
 
-        <div class="section-title">2. Échantillon des Données Validées</div>
+        <div class="section-title">2. Graphiques & Répartitions Visuelles</div>
+        <div class="charts-grid">
+            <div>${barSvg}</div>
+            <div>${donutSvg}</div>
+        </div>
+
+        <div class="section-title">3. Échantillon des Données Validées</div>
         <div style="overflow-x: auto;">
             <table>
                 <thead><tr>${headersHtml}</tr></thead>
@@ -807,8 +859,10 @@ export const api = {
   ) =>
     tauriInvoke<DashboardState>('run_analysis', {
       projectId,
+      project_id: projectId,
       filters,
       sortCriteria,
+      sort_criteria: sortCriteria,
     }),
 
   // Assistant
