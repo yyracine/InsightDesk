@@ -36,6 +36,8 @@ mod tests {
             missing_rate: 0.0,
             unique_count: 5,
             sample_values: vec![],
+            is_selected: true,
+            custom_role: Some("metric".to_string()),
         };
 
         let rows = vec![
@@ -82,6 +84,8 @@ mod tests {
                 missing_rate: 0.0,
                 unique_count: 2,
                 sample_values: vec![],
+                is_selected: true,
+                custom_role: Some("dimension".to_string()),
             },
             ColumnSchema {
                 name: "Montant".to_string(),
@@ -92,6 +96,8 @@ mod tests {
                 missing_rate: 0.0,
                 unique_count: 2,
                 sample_values: vec![],
+                is_selected: true,
+                custom_role: Some("metric".to_string()),
             },
         ];
 
@@ -113,6 +119,79 @@ mod tests {
         assert_eq!(filtered.len(), 2);
         assert_eq!(filtered[0].values[0], json!("Nord"));
         assert_eq!(filtered[1].values[0], json!("Nord"));
+    }
+
+    #[test]
+    fn test_multi_criteria_sorting_cascade() {
+        use crate::analytics::filters::apply_sorting;
+        use crate::models::SortCriterion;
+
+        let columns = vec![
+            ColumnSchema {
+                name: "Region".to_string(),
+                inferred_type: InferredColumnType::Categorical,
+                semantic_type: SemanticType::DimensionCategory,
+                nullable: false,
+                missing_count: 0,
+                missing_rate: 0.0,
+                unique_count: 2,
+                sample_values: vec![],
+                is_selected: true,
+                custom_role: None,
+            },
+            ColumnSchema {
+                name: "Chiffre".to_string(),
+                inferred_type: InferredColumnType::Float,
+                semantic_type: SemanticType::MetricAmount,
+                nullable: false,
+                missing_count: 0,
+                missing_rate: 0.0,
+                unique_count: 4,
+                sample_values: vec![],
+                is_selected: true,
+                custom_role: None,
+            },
+            ColumnSchema {
+                name: "Produit".to_string(),
+                inferred_type: InferredColumnType::Text,
+                semantic_type: SemanticType::DimensionCategory,
+                nullable: false,
+                missing_count: 0,
+                missing_rate: 0.0,
+                unique_count: 3,
+                sample_values: vec![],
+                is_selected: true,
+                custom_role: None,
+            },
+        ];
+
+        let rows = vec![
+            DataRow { row_index: 0, values: vec![json!("Abidjan"), json!(100.0), json!("B")], source_file: "f.csv".to_string(), source_location: None },
+            DataRow { row_index: 1, values: vec![json!("Dakar"), json!(500.0), json!("A")], source_file: "f.csv".to_string(), source_location: None },
+            DataRow { row_index: 2, values: vec![json!("Abidjan"), json!(300.0), json!("A")], source_file: "f.csv".to_string(), source_location: None },
+            DataRow { row_index: 3, values: vec![json!("Abidjan"), json!(100.0), json!("A")], source_file: "f.csv".to_string(), source_location: None },
+        ];
+
+        // 3-level sort: Region ASC, Chiffre DESC, Produit ASC
+        let criteria = vec![
+            SortCriterion { id: "1".to_string(), field: "Region".to_string(), direction: "asc".to_string() },
+            SortCriterion { id: "2".to_string(), field: "Chiffre".to_string(), direction: "desc".to_string() },
+            SortCriterion { id: "3".to_string(), field: "Produit".to_string(), direction: "asc".to_string() },
+        ];
+
+        let sorted = apply_sorting(&columns, rows, &criteria);
+        assert_eq!(sorted.len(), 4);
+        // Abidjan 300 A
+        assert_eq!(sorted[0].values[0], json!("Abidjan"));
+        assert_eq!(sorted[0].values[1], json!(300.0));
+        // Abidjan 100 A (A before B)
+        assert_eq!(sorted[1].values[0], json!("Abidjan"));
+        assert_eq!(sorted[1].values[1], json!(100.0));
+        assert_eq!(sorted[1].values[2], json!("A"));
+        // Abidjan 100 B
+        assert_eq!(sorted[2].values[2], json!("B"));
+        // Dakar 500 A
+        assert_eq!(sorted[3].values[0], json!("Dakar"));
     }
 
     #[test]
@@ -139,6 +218,8 @@ mod tests {
             missing_rate: 0.0,
             unique_count: 4,
             sample_values: vec![],
+            is_selected: true,
+            custom_role: Some("metric".to_string()),
         }];
 
         let rows = vec![
@@ -161,7 +242,7 @@ mod tests {
         use crate::export::html_report::generate_html_report;
 
         let (proj, dataset) = create_demo_sales_project();
-        let dashboard = execute_analysis(&dataset, vec![], Some("XOF"));
+        let dashboard = execute_analysis(&dataset, vec![], vec![], Some("XOF"));
 
         // Verify KPIs are generated
         assert!(!dashboard.kpis.is_empty());

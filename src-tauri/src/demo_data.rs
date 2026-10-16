@@ -28,6 +28,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 12,
             sample_values: vec!["2024-01-15".to_string(), "2024-02-20".to_string()],
+            is_selected: true,
+            custom_role: Some("dimension".to_string()),
         },
         ColumnSchema {
             name: "Region".to_string(),
@@ -38,6 +40,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 4,
             sample_values: vec!["Île-de-France".to_string(), "Auvergne-Rhône-Alpes".to_string()],
+            is_selected: true,
+            custom_role: Some("dimension".to_string()),
         },
         ColumnSchema {
             name: "Categorie_Produit".to_string(),
@@ -48,6 +52,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 3,
             sample_values: vec!["Logiciels SaaS".to_string(), "Matériel IT".to_string()],
+            is_selected: true,
+            custom_role: Some("dimension".to_string()),
         },
         ColumnSchema {
             name: "Produit".to_string(),
@@ -58,6 +64,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 6,
             sample_values: vec!["Cloud ERP Pro".to_string(), "Serveur Enterprise".to_string()],
+            is_selected: true,
+            custom_role: Some("dimension".to_string()),
         },
         ColumnSchema {
             name: "Quantite".to_string(),
@@ -68,6 +76,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 8,
             sample_values: vec!["5".to_string(), "12".to_string()],
+            is_selected: true,
+            custom_role: Some("metric".to_string()),
         },
         ColumnSchema {
             name: "Chiffre_Affaires".to_string(),
@@ -78,6 +88,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 24,
             sample_values: vec!["15400.00".to_string(), "8200.00".to_string()],
+            is_selected: true,
+            custom_role: Some("metric".to_string()),
         },
         ColumnSchema {
             name: "Marge_Nette".to_string(),
@@ -88,6 +100,8 @@ pub fn create_demo_sales_project() -> (Project, Dataset) {
             missing_rate: 0.0,
             unique_count: 24,
             sample_values: vec!["4620.00".to_string(), "2050.00".to_string()],
+            is_selected: true,
+            custom_role: Some("metric".to_string()),
         },
     ];
 

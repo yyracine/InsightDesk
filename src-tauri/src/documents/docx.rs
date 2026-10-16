@@ -160,6 +160,8 @@ pub fn parse_docx_file(path: &Path) -> Result<DocxExtractResult> {
                     missing_rate: 0.0,
                     unique_count: 0,
                     sample_values: Vec::new(),
+                    is_selected: true,
+                    custom_role: None,
                 })
                 .collect();
 
@@ -203,6 +205,8 @@ pub fn parse_docx_file(path: &Path) -> Result<DocxExtractResult> {
             missing_rate: 0.0,
             unique_count: rows.len(),
             sample_values: Vec::new(),
+            is_selected: true,
+            custom_role: None,
         })
         .collect();
 

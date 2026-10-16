@@ -134,9 +134,9 @@ pub fn import_and_extract_document(
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     Repository::insert_document(&conn, &doc_item).map_err(|e| e.to_string())?;
-    Repository::save_dataset(&conn, &dataset).map_err(|e| e.to_string())?;
+    let saved_dataset = consolidate_or_save_dataset(&conn, &project_id, dataset)?;
 
-    Ok(dataset)
+    Ok(saved_dataset)
 }
 
 #[tauri::command]
@@ -178,9 +178,77 @@ pub fn import_document_content(
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     Repository::insert_document(&conn, &doc_item).map_err(|e| e.to_string())?;
-    Repository::save_dataset(&conn, &dataset).map_err(|e| e.to_string())?;
+    let saved_dataset = consolidate_or_save_dataset(&conn, &project_id, dataset)?;
 
-    Ok(dataset)
+    Ok(saved_dataset)
+}
+
+fn consolidate_or_save_dataset(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    new_dataset: Dataset,
+) -> Result<Dataset, String> {
+    let existing = Repository::get_dataset_by_project(conn, project_id)
+        .map_err(|e| e.to_string())?;
+
+    let final_dataset = match existing {
+        None => new_dataset,
+        Some(mut ex) => {
+            if ex.dataset_type == "tabular" && new_dataset.dataset_type == "tabular" {
+                let mut col_map = std::collections::HashMap::new();
+                for (idx, col) in ex.columns.iter().enumerate() {
+                    col_map.insert(col.name.to_lowercase(), idx);
+                }
+
+                for col in &new_dataset.columns {
+                    if !col_map.contains_key(&col.name.to_lowercase()) {
+                        let new_idx = ex.columns.len();
+                        col_map.insert(col.name.to_lowercase(), new_idx);
+                        ex.columns.push(col.clone());
+                        for row in &mut ex.rows {
+                            row.values.push(serde_json::Value::Null);
+                        }
+                    }
+                }
+
+                let total_cols = ex.columns.len();
+                let start_idx = ex.rows.len();
+
+                for (r_i, r) in new_dataset.rows.into_iter().enumerate() {
+                    let mut values = vec![serde_json::Value::Null; total_cols];
+                    for (c_idx, val) in r.values.into_iter().enumerate() {
+                        if let Some(c_meta) = new_dataset.columns.get(c_idx) {
+                            if let Some(&target_idx) = col_map.get(&c_meta.name.to_lowercase()) {
+                                if target_idx < total_cols {
+                                    values[target_idx] = val;
+                                }
+                            }
+                        }
+                    }
+                    ex.rows.push(crate::models::DataRow {
+                        row_index: start_idx + r_i,
+                        values,
+                        source_file: r.source_file,
+                        source_location: r.source_location,
+                    });
+                }
+
+                ex.row_count = ex.rows.len();
+                ex.column_count = ex.columns.len();
+                ex.name = format!("Données Consolidées (Multi-Fichiers)");
+                ex
+            } else if ex.dataset_type == "tabular" && new_dataset.dataset_type != "tabular" {
+                ex
+            } else if ex.dataset_type != "tabular" && new_dataset.dataset_type == "tabular" {
+                new_dataset
+            } else {
+                new_dataset
+            }
+        }
+    };
+
+    Repository::save_dataset(conn, &final_dataset).map_err(|e| e.to_string())?;
+    Ok(final_dataset)
 }
 
 #[tauri::command]
@@ -228,6 +296,7 @@ pub fn run_analysis(
     db: State<DbPool>,
     project_id: String,
     filters: Vec<DataFilter>,
+    sort_criteria: Option<Vec<crate::models::SortCriterion>>,
 ) -> Result<DashboardState, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let dataset = Repository::get_dataset_by_project(&conn, &project_id)
@@ -235,7 +304,12 @@ pub fn run_analysis(
         .ok_or_else(|| "Aucun jeu de données trouvé pour ce projet.".to_string())?;
     let settings = Repository::get_settings(&conn).unwrap_or_default();
 
-    let state = execute_analysis(&dataset, filters, Some(&settings.currency));
+    let state = execute_analysis(
+        &dataset,
+        filters,
+        sort_criteria.unwrap_or_default(),
+        Some(&settings.currency),
+    );
     Ok(state)
 }
 
@@ -291,7 +365,7 @@ pub fn export_project_report_html(
         .ok_or_else(|| "Aucun jeu de données trouvé.".to_string())?;
     let settings = Repository::get_settings(&conn).unwrap_or_default();
 
-    let dashboard = execute_analysis(&dataset, vec![], Some(&settings.currency));
+    let dashboard = execute_analysis(&dataset, vec![], vec![], Some(&settings.currency));
     Ok(generate_html_report(&project, &dataset, &dashboard, Some(&settings.currency)))
 }
 

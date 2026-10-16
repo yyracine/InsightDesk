@@ -77,6 +77,8 @@ pub fn parse_pdf_file(path: &Path) -> Result<PdfExtractResult> {
                 missing_rate: 0.0,
                 unique_count: rows.len(),
                 sample_values: Vec::new(),
+                is_selected: true,
+                custom_role: None,
             })
             .collect();
 
@@ -119,6 +121,8 @@ pub fn parse_pdf_file(path: &Path) -> Result<PdfExtractResult> {
             missing_rate: 0.0,
             unique_count: rows.len(),
             sample_values: Vec::new(),
+            is_selected: true,
+            custom_role: None,
         })
         .collect();
 

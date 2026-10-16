@@ -7,7 +7,7 @@ import {
   ArrowRight,
   TrendingUp,
 } from 'lucide-react';
-import { ColumnSchema, DashboardState, DataFilter, Dataset, Project } from '../../types';
+import { ColumnSchema, DashboardState, DataFilter, Dataset, Project, SortCriterion } from '../../types';
 import { FilterBar } from './FilterBar';
 import { KpiWidget } from '../../components/charts/KpiWidget';
 import { TrendChart } from '../../components/charts/TrendChart';
@@ -20,7 +20,7 @@ interface DashboardViewProps {
   project: Project | null;
   dataset: Dataset | null;
   dashboardState: DashboardState | null;
-  onApplyFilters: (filters: DataFilter[]) => void;
+  onApplyFilters: (filters: DataFilter[], sortCriteria?: SortCriterion[]) => void;
   onResetFilters: () => void;
   onExportReport: () => void;
   onDrillDown: (field?: string, value?: string) => void;
@@ -82,7 +82,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center space-x-3">
           <button
             onClick={onExportReport}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs flex items-center space-x-1.5 transition-colors"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
           >
             <FileDown className="w-4 h-4 text-blue-400" />
             <span>Exporter Rapport HTML / PDF</span>
@@ -90,10 +90,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Dynamic Filter Bar */}
+      {/* Dynamic Filter Bar with Multi-Criteria Sorting */}
       <FilterBar
         columns={dataset.columns}
         activeFilters={dashboardState.active_filters}
+        sortCriteria={dashboardState.sort_criteria || []}
         onApplyFilters={onApplyFilters}
         onResetFilters={onResetFilters}
         totalRows={dashboardState.total_rows}

@@ -8,6 +8,7 @@ import {
   Dataset,
   DocumentItem,
   Project,
+  SortCriterion,
 } from './types';
 import { Sidebar, NavigationTab } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -183,15 +184,26 @@ export const App: React.FC = () => {
     if (!activeProject) return;
     const updatedDataset = await api.updateColumnMetadata(activeProject.id, columns);
     setDataset(updatedDataset);
-    const state = await api.runAnalysis(activeProject.id, dashboardState?.active_filters || []);
+    const state = await api.runAnalysis(
+      activeProject.id,
+      dashboardState?.active_filters || [],
+      dashboardState?.sort_criteria || []
+    );
     setDashboardState(state);
   };
 
-  const handleApplyFilters = async (filters: DataFilter[]) => {
+  const handleApplyFilters = async (
+    filters: DataFilter[],
+    sortCriteria?: SortCriterion[]
+  ) => {
     if (!activeProject) return;
     setIsProcessing(true);
     try {
-      const state = await api.runAnalysis(activeProject.id, filters);
+      const state = await api.runAnalysis(
+        activeProject.id,
+        filters,
+        sortCriteria ?? dashboardState?.sort_criteria
+      );
       setDashboardState(state);
     } finally {
       setIsProcessing(false);
@@ -199,7 +211,7 @@ export const App: React.FC = () => {
   };
 
   const handleResetFilters = async () => {
-    await handleApplyFilters([]);
+    await handleApplyFilters([], []);
   };
 
   const handleDrillDown = (field?: string, value?: string) => {

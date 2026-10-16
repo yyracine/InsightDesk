@@ -7,4 +7,4 @@ pub mod statistics;
 pub mod temporal;
 
 pub use engine::execute_analysis;
-pub use filters::apply_filters;
+pub use filters::{apply_filters, apply_sorting};

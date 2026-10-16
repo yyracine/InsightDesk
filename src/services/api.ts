@@ -10,6 +10,7 @@ import {
   DocumentItem,
   InsightItem,
   Project,
+  SortCriterion,
 } from '../types';
 
 declare global {
@@ -323,7 +324,55 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         ? parseContentToDataset(pId, fileName, content)
         : parseContentToDataset(pId, fileName, '');
 
-      browserDatasets.set(pId, newDataset);
+      const existingDataset = browserDatasets.get(pId);
+      let consolidatedDataset = newDataset;
+
+      if (existingDataset) {
+        if (existingDataset.dataset_type === 'tabular' && newDataset.dataset_type === 'tabular') {
+          const colMap = new Map<string, number>();
+          existingDataset.columns.forEach((c, idx) => colMap.set(c.name.toLowerCase(), idx));
+
+          for (const c of newDataset.columns) {
+            if (!colMap.has(c.name.toLowerCase())) {
+              const newIdx = existingDataset.columns.length;
+              colMap.set(c.name.toLowerCase(), newIdx);
+              existingDataset.columns.push(c);
+              existingDataset.rows.forEach((r) => r.values.push(null));
+            }
+          }
+
+          const totalCols = existingDataset.columns.length;
+          const startIdx = existingDataset.rows.length;
+
+          newDataset.rows.forEach((r, r_i) => {
+            const values = new Array(totalCols).fill(null);
+            r.values.forEach((v, c_idx) => {
+              const colMeta = newDataset.columns[c_idx];
+              if (colMeta) {
+                const targetIdx = colMap.get(colMeta.name.toLowerCase());
+                if (targetIdx !== undefined) {
+                  values[targetIdx] = v;
+                }
+              }
+            });
+            existingDataset.rows.push({
+              row_index: startIdx + r_i,
+              values,
+              source_file: r.source_file,
+              source_location: r.source_location,
+            });
+          });
+
+          existingDataset.row_count = existingDataset.rows.length;
+          existingDataset.column_count = existingDataset.columns.length;
+          existingDataset.name = 'Données Consolidées (Multi-Fichiers)';
+          consolidatedDataset = existingDataset;
+        } else if (existingDataset.dataset_type === 'tabular') {
+          consolidatedDataset = existingDataset;
+        }
+      }
+
+      browserDatasets.set(pId, consolidatedDataset);
 
       const ext = fileName.split('.').pop()?.toLowerCase() || 'csv';
       const newDoc: DocumentItem = {
@@ -344,7 +393,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
       const existingDocs = browserDocuments.get(pId) || [];
       browserDocuments.set(pId, [newDoc, ...existingDocs]);
 
-      return newDataset as unknown as T;
+      return consolidatedDataset as unknown as T;
     }
 
     case 'get_project_dataset': {
@@ -387,14 +436,61 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         }
       }
 
+      // Multi-criteria sorting (up to 4 levels)
+      const sortCriteria: SortCriterion[] = args?.sortCriteria || [];
+      if (sortCriteria.length > 0) {
+        filtered.sort((a, b) => {
+          for (const sc of sortCriteria) {
+            const colIdx = ds.columns.findIndex((c) => c.name === sc.field);
+            if (colIdx < 0) continue;
+            const valA = a.values[colIdx];
+            const valB = b.values[colIdx];
+            if (valA === valB) continue;
+            if (valA === null || valA === undefined) return 1;
+            if (valB === null || valB === undefined) return -1;
+            const isAsc = sc.direction.toLowerCase() !== 'desc';
+            const numA = Number(valA);
+            const numB = Number(valB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+              return isAsc ? numA - numB : numB - numA;
+            }
+            const comp = String(valA).localeCompare(String(valB));
+            if (comp !== 0) {
+              return isAsc ? comp : -comp;
+            }
+          }
+          return 0;
+        });
+      }
+
+      const isUsableMetric = (col: ColumnSchema) => {
+        if (col.is_selected === false) return false;
+        if (col.custom_role === 'ignored' || col.custom_role === 'id') return false;
+        if (col.semantic_type === 'EntityId' || col.inferred_type === 'Identifier') return false;
+        const lower = col.name.toLowerCase();
+        if (
+          lower === 'id' ||
+          lower.startsWith('id_') ||
+          lower.endsWith('_id') ||
+          lower.includes('client_id') ||
+          lower.includes('id_client') ||
+          lower.includes('id client') ||
+          lower.includes('matricule') ||
+          lower.includes('uuid')
+        ) {
+          if (col.custom_role !== 'metric') return false;
+        }
+        return (
+          col.inferred_type === 'Float' ||
+          col.inferred_type === 'Integer' ||
+          col.inferred_type === 'Currency' ||
+          col.custom_role === 'metric'
+        );
+      };
+
       const metricCols = ds.columns
         .map((c, i) => ({ col: c, idx: i }))
-        .filter(
-          (x) =>
-            x.col.inferred_type === 'Float' ||
-            x.col.inferred_type === 'Integer' ||
-            x.col.inferred_type === 'Currency'
-        );
+        .filter((x) => isUsableMetric(x.col));
 
       const primaryMetric = metricCols[0];
       const primaryTotal = primaryMetric
@@ -704,8 +800,16 @@ export const api = {
     tauriInvoke<Dataset>('update_column_metadata', { projectId, columns }),
 
   // Analytics & Dashboard
-  runAnalysis: (projectId: string, filters: DataFilter[] = []) =>
-    tauriInvoke<DashboardState>('run_analysis', { projectId, filters }),
+  runAnalysis: (
+    projectId: string,
+    filters: DataFilter[] = [],
+    sortCriteria?: SortCriterion[]
+  ) =>
+    tauriInvoke<DashboardState>('run_analysis', {
+      projectId,
+      filters,
+      sortCriteria,
+    }),
 
   // Assistant
   askAssistant: (projectId: string, query: string) =>

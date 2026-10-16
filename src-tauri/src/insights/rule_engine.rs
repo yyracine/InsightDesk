@@ -55,8 +55,44 @@ pub fn generate_deterministic_insights(
         }
     }
 
+    let is_col_usable = |col: &ColumnSchema| -> bool {
+        if !col.is_selected {
+            return false;
+        }
+        if let Some(role) = col.custom_role.as_deref() {
+            if role == "ignored" || role == "id" {
+                return false;
+            }
+        }
+        if col.semantic_type == SemanticType::EntityId
+            || col.inferred_type == InferredColumnType::Identifier
+        {
+            return false;
+        }
+        let lower = col.name.to_lowercase();
+        if lower == "id"
+            || lower.starts_with("id_")
+            || lower.ends_with("_id")
+            || lower.contains("client_id")
+            || lower.contains("id_client")
+            || lower.contains("id client")
+            || lower.contains("uuid")
+            || lower.contains("matricule")
+        {
+            if col.custom_role.as_deref() != Some("metric")
+                && col.custom_role.as_deref() != Some("dimension")
+            {
+                return false;
+            }
+        }
+        true
+    };
+
     // 2. Statistical Outliers Insights (IQR method)
     for (idx, col) in columns.iter().enumerate() {
+        if !is_col_usable(col) {
+            continue;
+        }
         if matches!(col.inferred_type, InferredColumnType::Integer | InferredColumnType::Float | InferredColumnType::Currency) {
             let stats = calculate_column_stats(idx, col, rows);
             if stats.outlier_count > 0 {
@@ -86,11 +122,16 @@ pub fn generate_deterministic_insights(
     }
 
     // 3. Concentration / Pareto Insight (80/20 rule on categories)
-    let cat_col = columns.iter().enumerate().find(|(_, c)| {
-        c.semantic_type == SemanticType::DimensionCategory || c.inferred_type == InferredColumnType::Categorical
+    let cat_col = columns.iter().enumerate().filter(|(_, c)| is_col_usable(c)).find(|(_, c)| {
+        c.custom_role.as_deref() == Some("dimension")
+            || c.semantic_type == SemanticType::DimensionCategory
+            || c.inferred_type == InferredColumnType::Categorical
     });
-    let metric_col = columns.iter().enumerate().find(|(_, c)| {
-        c.semantic_type == SemanticType::MetricAmount || c.semantic_type == SemanticType::MetricQuantity
+    let metric_col = columns.iter().enumerate().filter(|(_, c)| is_col_usable(c)).find(|(_, c)| {
+        c.custom_role.as_deref() == Some("metric")
+            || c.semantic_type == SemanticType::MetricAmount
+            || c.semantic_type == SemanticType::MetricQuantity
+            || matches!(c.inferred_type, InferredColumnType::Float | InferredColumnType::Currency)
     });
 
     if let (Some((c_idx, c_col)), Some((m_idx, m_col))) = (cat_col, metric_col) {
@@ -120,7 +161,7 @@ pub fn generate_deterministic_insights(
     }
 
     // 4. Temporal Significant Variation Insight (Spikes & Drops > 25%)
-    let date_col = columns.iter().enumerate().find(|(_, c)| {
+    let date_col = columns.iter().enumerate().filter(|(_, c)| is_col_usable(c)).find(|(_, c)| {
         c.semantic_type == SemanticType::DimensionDate || c.inferred_type == InferredColumnType::Date
     });
 

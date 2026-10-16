@@ -130,6 +130,8 @@ pub fn parse_excel_file(path: &Path) -> Result<ExcelExtractResult> {
             missing_rate: 0.0,
             unique_count: 0,
             sample_values: Vec::new(),
+            is_selected: true,
+            custom_role: None,
         })
         .collect();
 

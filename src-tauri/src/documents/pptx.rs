@@ -116,6 +116,8 @@ pub fn parse_pptx_file(path: &Path) -> Result<PptxExtractResult> {
             missing_rate: 0.0,
             unique_count: rows.len(),
             sample_values: Vec::new(),
+            is_selected: true,
+            custom_role: None,
         })
         .collect();
 

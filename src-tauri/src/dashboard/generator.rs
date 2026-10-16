@@ -39,19 +39,61 @@ pub fn generate_smart_dashboard(
 
     let total_rows = rows.len();
 
+    let is_col_usable = |c: &ColumnSchema| -> bool {
+        if !c.is_selected {
+            return false;
+        }
+        if let Some(role) = c.custom_role.as_deref() {
+            if role == "ignored" || role == "id" {
+                return false;
+            }
+        }
+        if c.semantic_type == SemanticType::EntityId
+            || c.inferred_type == InferredColumnType::Identifier
+        {
+            return false;
+        }
+        let lower = c.name.to_lowercase();
+        if lower == "id"
+            || lower.starts_with("id_")
+            || lower.ends_with("_id")
+            || lower.contains("client_id")
+            || lower.contains("id_client")
+            || lower.contains("id client")
+            || lower.contains("uuid")
+            || lower.contains("matricule")
+        {
+            if c.custom_role.as_deref() != Some("metric")
+                && c.custom_role.as_deref() != Some("dimension")
+            {
+                return false;
+            }
+        }
+        true
+    };
+
     // 1. Identify primary metric (Amount, Quantity, Float, Integer)
     let metric_col = columns
         .iter()
         .enumerate()
-        .find(|(_, c)| c.semantic_type == SemanticType::MetricAmount)
+        .filter(|(_, c)| is_col_usable(c))
+        .find(|(_, c)| c.custom_role.as_deref() == Some("metric"))
         .or_else(|| {
             columns
                 .iter()
                 .enumerate()
+                .filter(|(_, c)| is_col_usable(c))
+                .find(|(_, c)| c.semantic_type == SemanticType::MetricAmount)
+        })
+        .or_else(|| {
+            columns
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| is_col_usable(c))
                 .find(|(_, c)| c.semantic_type == SemanticType::MetricQuantity)
         })
         .or_else(|| {
-            columns.iter().enumerate().find(|(_, c)| {
+            columns.iter().enumerate().filter(|(_, c)| is_col_usable(c)).find(|(_, c)| {
                 matches!(
                     c.inferred_type,
                     InferredColumnType::Float | InferredColumnType::Integer | InferredColumnType::Currency
@@ -60,22 +102,37 @@ pub fn generate_smart_dashboard(
         });
 
     // 2. Identify date column
-    let date_col = columns.iter().enumerate().find(|(_, c)| {
-        c.semantic_type == SemanticType::DimensionDate
-            || c.inferred_type == InferredColumnType::Date
-            || c.inferred_type == InferredColumnType::Datetime
-    });
-
-    // 3. Identify categorical columns
-    let category_cols: Vec<(usize, &ColumnSchema)> = columns
+    let date_col = columns
         .iter()
         .enumerate()
+        .filter(|(_, c)| is_col_usable(c))
+        .find(|(_, c)| {
+            c.semantic_type == SemanticType::DimensionDate
+                || c.inferred_type == InferredColumnType::Date
+                || c.inferred_type == InferredColumnType::Datetime
+        });
+
+    // 3. Identify categorical columns
+    let mut category_cols: Vec<(usize, &ColumnSchema)> = columns
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| is_col_usable(c))
         .filter(|(_, c)| {
-            c.semantic_type == SemanticType::DimensionCategory
+            c.custom_role.as_deref() == Some("dimension")
+                || c.semantic_type == SemanticType::DimensionCategory
                 || c.semantic_type == SemanticType::DimensionGeo
                 || c.inferred_type == InferredColumnType::Categorical
+                || c.inferred_type == InferredColumnType::Text
         })
         .collect();
+
+    category_cols.sort_by_key(|(_, c)| {
+        if c.custom_role.as_deref() == Some("dimension") {
+            0
+        } else {
+            1
+        }
+    });
 
     // -----------------------------------------------------------------
     // KPI 1: Total Enregistrements

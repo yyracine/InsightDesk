@@ -54,6 +54,10 @@ pub enum SemanticType {
     UnstructuredText,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnSchema {
     pub name: String,
@@ -64,6 +68,17 @@ pub struct ColumnSchema {
     pub missing_rate: f64,
     pub unique_count: usize,
     pub sample_values: Vec<String>,
+    #[serde(default = "default_true")]
+    pub is_selected: bool,
+    #[serde(default)]
+    pub custom_role: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SortCriterion {
+    pub id: String,
+    pub field: String,
+    pub direction: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,6 +217,8 @@ pub struct DashboardState {
     pub total_rows: usize,
     pub filtered_rows_count: usize,
     pub active_filters: Vec<DataFilter>,
+    #[serde(default)]
+    pub sort_criteria: Vec<SortCriterion>,
     pub kpis: Vec<KpiCard>,
     pub charts: Vec<ChartWidgetConfig>,
     pub insights: Vec<InsightItem>,

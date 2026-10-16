@@ -188,6 +188,44 @@ pub fn infer_and_normalize_columns(
             _ => SemanticType::UnstructuredText,
         };
 
+        let is_id = semantic_type == SemanticType::EntityId
+            || inferred_type == InferredColumnType::Identifier
+            || col_name_lower == "id"
+            || col_name_lower.starts_with("id_")
+            || col_name_lower.ends_with("_id")
+            || col_name_lower.contains("client_id")
+            || col_name_lower.contains("id_client")
+            || col_name_lower.contains("id client")
+            || col_name_lower.contains("matricule")
+            || col_name_lower.contains("uuid")
+            || col_name_lower.contains("code_client");
+
+        let custom_role = if is_id {
+            Some("id".to_string())
+        } else if matches!(
+            semantic_type,
+            SemanticType::MetricAmount
+                | SemanticType::MetricQuantity
+                | SemanticType::MetricPercentage
+        ) || matches!(
+            inferred_type,
+            InferredColumnType::Float | InferredColumnType::Currency
+        ) {
+            Some("metric".to_string())
+        } else if matches!(
+            semantic_type,
+            SemanticType::DimensionCategory
+                | SemanticType::DimensionDate
+                | SemanticType::DimensionGeo
+        ) || matches!(
+            inferred_type,
+            InferredColumnType::Categorical | InferredColumnType::Date | InferredColumnType::Datetime
+        ) {
+            Some("dimension".to_string())
+        } else {
+            None
+        };
+
         result.push(ColumnSchema {
             name: orig_col.name.clone(),
             inferred_type,
@@ -197,6 +235,8 @@ pub fn infer_and_normalize_columns(
             missing_rate,
             unique_count: unique_values.len(),
             sample_values: samples,
+            is_selected: !is_id,
+            custom_role,
         });
     }
 

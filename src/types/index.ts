@@ -55,6 +55,8 @@ export interface ColumnSchema {
   missing_rate: number;
   unique_count: number;
   sample_values: string[];
+  is_selected?: boolean;
+  custom_role?: 'metric' | 'dimension' | 'id' | 'ignored';
 }
 
 export interface DataRow {
@@ -158,11 +160,18 @@ export interface CorrelationPair {
   coefficient: number;
 }
 
+export interface SortCriterion {
+  id: string;
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
 export interface DashboardState {
   project_id: string;
   total_rows: number;
   filtered_rows_count: number;
   active_filters: DataFilter[];
+  sort_criteria?: SortCriterion[];
   kpis: KpiCard[];
   charts: ChartWidgetConfig[];
   insights: InsightItem[];

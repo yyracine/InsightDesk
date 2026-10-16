@@ -77,6 +77,8 @@ pub fn parse_text_or_json_str(content: &str, file_name: &str) -> Result<TextExtr
                             missing_rate: 0.0,
                             unique_count: rows.len(),
                             sample_values: Vec::new(),
+                            is_selected: true,
+                            custom_role: None,
                         })
                         .collect();
 
@@ -150,6 +152,8 @@ pub fn parse_text_or_json_str(content: &str, file_name: &str) -> Result<TextExtr
                 missing_rate: 0.0,
                 unique_count: rows.len(),
                 sample_values: Vec::new(),
+                is_selected: true,
+                custom_role: None,
             })
             .collect();
 
@@ -199,6 +203,8 @@ pub fn parse_text_or_json_str(content: &str, file_name: &str) -> Result<TextExtr
             missing_rate: 0.0,
             unique_count: rows.len(),
             sample_values: Vec::new(),
+            is_selected: true,
+            custom_role: None,
         })
         .collect();
 
