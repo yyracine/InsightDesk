@@ -112,6 +112,8 @@ impl Repository {
     }
 
     pub fn delete_project(conn: &Connection, id: &str) -> Result<()> {
+        conn.execute("DELETE FROM documents WHERE project_id = ?1", params![id])?;
+        conn.execute("DELETE FROM datasets WHERE project_id = ?1", params![id])?;
         conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         Ok(())
     }
@@ -181,6 +183,7 @@ impl Repository {
 
     pub fn delete_document(conn: &Connection, doc_id: &str) -> Result<()> {
         conn.execute("DELETE FROM documents WHERE id = ?1", params![doc_id])?;
+        conn.execute("DELETE FROM datasets WHERE document_id = ?1", params![doc_id])?;
         Ok(())
     }
 

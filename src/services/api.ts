@@ -1,11 +1,14 @@
 import {
   AppSettings,
   AssistantMessage,
+  ChartWidgetConfig,
   ColumnSchema,
   DashboardState,
   DataFilter,
+  DataRow,
   Dataset,
   DocumentItem,
+  InsightItem,
   Project,
 } from '../types';
 
@@ -20,11 +23,12 @@ const isTauri = typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNAL
 
 // In-memory state for mock/browser mode
 let browserProjects: Project[] = [];
-let browserDataset: Dataset | null = null;
+const browserDatasets: Map<string, Dataset> = new Map();
+const browserDocuments: Map<string, DocumentItem[]> = new Map();
 let browserSettings: AppSettings = {
   theme: 'dark',
   language: 'fr',
-  currency: 'EUR',
+  currency: 'XOF',
   date_format: 'DD/MM/YYYY',
   ai_provider: 'local_deterministic',
   telemetry_enabled: false,
@@ -38,12 +42,149 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, any>): Promise<
   return mockInvoke<T>(cmd, args);
 }
 
+function parseContentToDataset(projectId: string, fileName: string, content: string): Dataset {
+  const isJson = fileName.toLowerCase().endsWith('.json');
+  if (isJson) {
+    try {
+      const parsed = JSON.parse(content);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      if (arr.length > 0 && typeof arr[0] === 'object' && arr[0] !== null) {
+        const keys = Array.from(new Set(arr.flatMap((o) => Object.keys(o))));
+        const columns: ColumnSchema[] = keys.map((k) => ({
+          name: k,
+          inferred_type: typeof arr[0][k] === 'number' ? 'Float' : 'Text',
+          semantic_type: typeof arr[0][k] === 'number' ? 'MetricAmount' : 'DimensionCategory',
+          nullable: true,
+          missing_count: 0,
+          missing_rate: 0,
+          unique_count: arr.length,
+          sample_values: arr.slice(0, 3).map((o) => String(o[k] ?? '')),
+        }));
+        const rows: DataRow[] = arr.map((item, idx) => ({
+          row_index: idx,
+          values: keys.map((k) => item[k] ?? null),
+          source_file: fileName,
+          source_location: `Objet ${idx + 1}`,
+        }));
+        return {
+          id: `ds-${Date.now()}`,
+          project_id: projectId,
+          name: fileName,
+          dataset_type: 'tabular',
+          row_count: rows.length,
+          column_count: columns.length,
+          columns,
+          rows,
+          created_at: new Date().toISOString(),
+        };
+      }
+    } catch (e) {
+      console.warn('JSON parsing fallback:', e);
+    }
+  }
+
+  // Parse CSV / TSV text
+  const rawLines = content.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  if (rawLines.length > 0) {
+    const firstLine = rawLines[0];
+    const semiCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const delimiter =
+      semiCount > commaCount && semiCount > tabCount ? ';' : tabCount > commaCount ? '\t' : ',';
+
+    const headers = firstLine.split(delimiter).map((h) => h.trim().replace(/^["']|["']$/g, ''));
+    const rows: DataRow[] = [];
+
+    for (let i = 1; i < rawLines.length; i++) {
+      const parts = rawLines[i].split(delimiter).map((p) => p.trim().replace(/^["']|["']$/g, ''));
+      const values: (string | number | null)[] = headers.map((_, colIdx) => {
+        const raw = parts[colIdx] ?? '';
+        if (raw === '' || raw === 'null' || raw === 'N/A' || raw === '-') return null;
+        const cleanNum = raw
+          .replace(/\s/g, '')
+          .replace('FCFA', '')
+          .replace('€', '')
+          .replace('$', '')
+          .replace(',', '.');
+        const num = parseFloat(cleanNum);
+        if (!isNaN(num) && /^-?\d+(\.\d+)?$/.test(cleanNum)) {
+          return num;
+        }
+        return raw;
+      });
+
+      rows.push({
+        row_index: rows.length,
+        values,
+        source_file: fileName,
+        source_location: `Ligne ${i + 1}`,
+      });
+    }
+
+    const columns: ColumnSchema[] = headers.map((h, colIdx) => {
+      const nonNulls = rows.map((r) => r.values[colIdx]).filter((v) => v !== null);
+      const isNum = nonNulls.length > 0 && nonNulls.every((v) => typeof v === 'number');
+      const isDate =
+        nonNulls.length > 0 &&
+        nonNulls.every((v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/.test(v));
+      const isCurr = isNum && /prix|montant|ca|total|marge|vente|cost|revenue/i.test(h);
+
+      return {
+        name: h,
+        inferred_type: isCurr ? 'Currency' : isNum ? 'Float' : isDate ? 'Date' : 'Categorical',
+        semantic_type: isNum ? 'MetricAmount' : isDate ? 'DimensionDate' : 'DimensionCategory',
+        nullable: nonNulls.length < rows.length,
+        missing_count: rows.length - nonNulls.length,
+        missing_rate: rows.length ? (rows.length - nonNulls.length) / rows.length : 0,
+        unique_count: new Set(nonNulls).size,
+        sample_values: nonNulls.slice(0, 3).map(String),
+      };
+    });
+
+    return {
+      id: `ds-${Date.now()}`,
+      project_id: projectId,
+      name: fileName,
+      dataset_type: 'tabular',
+      row_count: rows.length,
+      column_count: columns.length,
+      columns,
+      rows,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  // Fallback for non-text or empty
+  return {
+    id: `ds-${Date.now()}`,
+    project_id: projectId,
+    name: fileName,
+    dataset_type: 'tabular',
+    row_count: 5,
+    column_count: 4,
+    columns: [
+      { name: 'ID', inferred_type: 'Integer', semantic_type: 'EntityId', nullable: false, missing_count: 0, missing_rate: 0, unique_count: 5, sample_values: ['1', '2'] },
+      { name: 'Libellé', inferred_type: 'Categorical', semantic_type: 'DimensionCategory', nullable: false, missing_count: 0, missing_rate: 0, unique_count: 5, sample_values: ['Article A', 'Article B'] },
+      { name: 'Date_Opération', inferred_type: 'Date', semantic_type: 'DimensionDate', nullable: false, missing_count: 0, missing_rate: 0, unique_count: 5, sample_values: ['2024-05-01'] },
+      { name: 'Montant_FCFA', inferred_type: 'Currency', semantic_type: 'MetricAmount', nullable: false, missing_count: 0, missing_rate: 0, unique_count: 5, sample_values: ['150000', '250000'] },
+    ],
+    rows: [
+      { row_index: 0, values: [1, 'Article A', '2024-05-01', 150000], source_file: fileName, source_location: 'Ligne 2' },
+      { row_index: 1, values: [2, 'Article B', '2024-05-03', 250000], source_file: fileName, source_location: 'Ligne 3' },
+      { row_index: 2, values: [3, 'Article C', '2024-05-10', 480000], source_file: fileName, source_location: 'Ligne 4' },
+      { row_index: 3, values: [4, 'Article A', '2024-05-15', 320000], source_file: fileName, source_location: 'Ligne 5' },
+      { row_index: 4, values: [5, 'Article D', '2024-05-22', 190000], source_file: fileName, source_location: 'Ligne 6' },
+    ],
+    created_at: new Date().toISOString(),
+  };
+}
+
 // Fallback for browser preview / testing
 async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T> {
   switch (cmd) {
     case 'list_projects':
       if (browserProjects.length === 0) {
-        // Automatically provide demo project
         await mockInvoke('load_demo_project');
       }
       return browserProjects as unknown as T;
@@ -59,6 +200,8 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         settings_json: '{}',
       };
       browserProjects.unshift(newProj);
+      browserDocuments.set(newProj.id, []);
+      browserDatasets.delete(newProj.id);
       return newProj as unknown as T;
     }
 
@@ -67,7 +210,8 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
       const demoProj: Project = {
         id: demoId,
         name: 'Projet Démo — Performance Commerciale & Marges',
-        description: 'Jeu de données de démonstration certifié : 24 transactions commerciales réelles sur 2024-2025 pour tester les analyses, graphiques et filtres.',
+        description:
+          'Jeu de données de démonstration certifié : 24 transactions commerciales réelles sur 2024-2025 pour tester les analyses, graphiques et filtres.',
         is_demo: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -75,7 +219,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
       };
       browserProjects.unshift(demoProj);
 
-      browserDataset = {
+      const demoDataset: Dataset = {
         id: `ds-${demoId}`,
         project_id: demoId,
         name: 'Performance Commerciale 2024 (Démo)',
@@ -119,58 +263,123 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         ],
         created_at: new Date().toISOString(),
       };
+
+      browserDatasets.set(demoId, demoDataset);
+      browserDocuments.set(demoId, [
+        {
+          id: `doc-${demoId}`,
+          project_id: demoId,
+          original_name: 'demo_commercial_performance.csv',
+          storage_path: 'C:\\Data\\demo_commercial_performance.csv',
+          file_hash: 'hash_demo_sha256',
+          file_format: 'csv',
+          file_size: 4250,
+          import_status: 'imported',
+          extraction_status: 'extracted',
+          metadata_json: '{}',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
       return demoProj as unknown as T;
     }
 
-    case 'delete_project':
-      browserProjects = browserProjects.filter((p) => p.id !== args?.id);
+    case 'delete_project': {
+      const id = args?.id;
+      browserProjects = browserProjects.filter((p) => p.id !== id);
+      browserDatasets.delete(id);
+      browserDocuments.delete(id);
       return null as unknown as T;
+    }
 
     case 'list_documents': {
-      const docs: DocumentItem[] = browserDataset
-        ? [
-            {
-              id: 'doc-browser',
-              project_id: args?.projectId || '',
-              original_name: browserDataset.name + '.csv',
-              storage_path: 'C:\\Data\\' + browserDataset.name + '.csv',
-              file_hash: 'hash_local_01',
-              file_format: 'csv',
-              file_size: 4250,
-              import_status: 'imported',
-              extraction_status: 'extracted',
-              metadata_json: '{}',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ]
-        : [];
-      return docs as unknown as T;
+      const pId = args?.projectId;
+      return (browserDocuments.get(pId) || []) as unknown as T;
     }
 
-    case 'import_and_extract_document': {
-      if (!browserDataset) {
-        await mockInvoke('load_demo_project');
+    case 'delete_document': {
+      const pId = args?.projectId;
+      const docId = args?.documentId;
+      if (pId) {
+        const existingDocs = browserDocuments.get(pId) || [];
+        const filteredDocs = existingDocs.filter((d) => d.id !== docId);
+        browserDocuments.set(pId, filteredDocs);
+        if (filteredDocs.length === 0) {
+          browserDatasets.delete(pId);
+        }
       }
-      return browserDataset as unknown as T;
+      return (browserDatasets.get(pId) || null) as unknown as T;
     }
 
-    case 'get_project_dataset':
-      return browserDataset as unknown as T;
+    case 'import_document_content':
+    case 'import_and_extract_document': {
+      const pId = args?.projectId || 'default';
+      const rawPath = args?.filePath || args?.fileName || 'donnees.csv';
+      const fileName = rawPath.split(/[/\\]/).pop() || 'donnees.csv';
+      const content = args?.content;
+
+      const newDataset = content
+        ? parseContentToDataset(pId, fileName, content)
+        : parseContentToDataset(pId, fileName, '');
+
+      browserDatasets.set(pId, newDataset);
+
+      const ext = fileName.split('.').pop()?.toLowerCase() || 'csv';
+      const newDoc: DocumentItem = {
+        id: `doc-${Date.now()}`,
+        project_id: pId,
+        original_name: fileName,
+        storage_path: rawPath,
+        file_hash: 'hash_' + Date.now(),
+        file_format: ext,
+        file_size: content ? content.length : 15400,
+        import_status: 'imported',
+        extraction_status: 'extracted',
+        metadata_json: '{}',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const existingDocs = browserDocuments.get(pId) || [];
+      browserDocuments.set(pId, [newDoc, ...existingDocs]);
+
+      return newDataset as unknown as T;
+    }
+
+    case 'get_project_dataset': {
+      const pId = args?.projectId;
+      return (browserDatasets.get(pId) || null) as unknown as T;
+    }
+
+    case 'update_column_metadata': {
+      const pId = args?.projectId;
+      const ds = browserDatasets.get(pId);
+      if (ds) {
+        ds.columns = args?.columns || ds.columns;
+      }
+      return ds as unknown as T;
+    }
 
     case 'run_analysis': {
-      if (!browserDataset) throw new Error('Aucun dataset actif');
-      let filtered = [...browserDataset.rows];
+      const pId = args?.projectId;
+      const ds = browserDatasets.get(pId);
+      if (!ds || ds.rows.length === 0) {
+        return null as unknown as T;
+      }
+
+      let filtered = [...ds.rows];
       const activeFilters: DataFilter[] = args?.filters || [];
 
       for (const f of activeFilters) {
         if (!f.active) continue;
-        const colIdx = browserDataset.columns.findIndex((c) => c.name === f.field);
+        const colIdx = ds.columns.findIndex((c) => c.name === f.field);
         if (colIdx >= 0) {
           filtered = filtered.filter((r) => {
             const val = r.values[colIdx];
             if (f.operator === 'equals') return String(val) === String(f.value);
-            if (f.operator === 'contains') return String(val).toLowerCase().includes(String(f.value).toLowerCase());
+            if (f.operator === 'contains')
+              return String(val).toLowerCase().includes(String(f.value).toLowerCase());
             if (f.operator === 'greater_than') return Number(val) >= Number(f.value);
             if (f.operator === 'less_than') return Number(val) <= Number(f.value);
             return true;
@@ -178,168 +387,180 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         }
       }
 
-      const totalCA = filtered.reduce((acc, r) => acc + (Number(r.values[5]) || 0), 0);
-      const totalMarge = filtered.reduce((acc, r) => acc + (Number(r.values[6]) || 0), 0);
-      const meanCA = filtered.length ? totalCA / filtered.length : 0;
+      const metricCols = ds.columns
+        .map((c, i) => ({ col: c, idx: i }))
+        .filter(
+          (x) =>
+            x.col.inferred_type === 'Float' ||
+            x.col.inferred_type === 'Integer' ||
+            x.col.inferred_type === 'Currency'
+        );
 
-      const state: DashboardState = {
-        project_id: args?.project_id,
-        total_rows: browserDataset.rows.length,
+      const primaryMetric = metricCols[0];
+      const primaryTotal = primaryMetric
+        ? filtered.reduce((acc, r) => acc + (Number(r.values[primaryMetric.idx]) || 0), 0)
+        : filtered.length;
+      const meanVal = filtered.length ? primaryTotal / filtered.length : 0;
+
+      const cur =
+        browserSettings.currency === 'XOF' || browserSettings.currency === 'XAF'
+          ? 'FCFA'
+          : browserSettings.currency;
+
+      const kpis = [
+        {
+          id: 'kpi_total_records',
+          title: 'Volume Total',
+          value: filtered.length,
+          formatted_value: `${filtered.length} lignes`,
+          unit: 'enregistrements',
+          description: 'Nombre de lignes filtrées',
+          source_column: 'Total lignes',
+          formula_explanation: 'Comptage déterministe',
+        },
+        ...(primaryMetric
+          ? [
+              {
+                id: 'kpi_primary_total',
+                title: `Total ${primaryMetric.col.name}`,
+                value: primaryTotal,
+                formatted_value: `${primaryTotal.toLocaleString('fr-FR', {
+                  minimumFractionDigits: 2,
+                })} ${cur}`,
+                unit: cur,
+                description: `Somme consolidée de ${primaryMetric.col.name}`,
+                source_column: primaryMetric.col.name,
+                formula_explanation: `Somme arithmétique de la colonne ${primaryMetric.col.name}`,
+              },
+              {
+                id: 'kpi_primary_mean',
+                title: `Moyenne ${primaryMetric.col.name}`,
+                value: meanVal,
+                formatted_value: `${meanVal.toLocaleString('fr-FR', {
+                  minimumFractionDigits: 2,
+                })} ${cur}`,
+                unit: cur,
+                description: `Moyenne par opération`,
+                source_column: primaryMetric.col.name,
+                formula_explanation: 'Moyenne arithmétique',
+              },
+            ]
+          : []),
+      ];
+
+      const catCols = ds.columns
+        .map((c, i) => ({ col: c, idx: i }))
+        .filter((x) => x.col.inferred_type === 'Categorical' || x.col.inferred_type === 'Text');
+
+      const dateCol = ds.columns
+        .map((c, i) => ({ col: c, idx: i }))
+        .find((x) => x.col.inferred_type === 'Date');
+
+      const charts: ChartWidgetConfig[] = [];
+
+      if (catCols.length > 0 && primaryMetric) {
+        const cat = catCols[0];
+        const groupMap = new Map<string, { value: number; count: number }>();
+        for (const r of filtered) {
+          const key = String(r.values[cat.idx] ?? 'Autre');
+          const val = Number(r.values[primaryMetric.idx]) || 0;
+          const curr = groupMap.get(key) || { value: 0, count: 0 };
+          groupMap.set(key, { value: curr.value + val, count: curr.count + 1 });
+        }
+        const catData = Array.from(groupMap.entries())
+          .map(([category, data]) => ({
+            category,
+            value: data.value,
+            count: data.count,
+            percentage: primaryTotal > 0 ? (data.value / primaryTotal) * 100 : 0,
+          }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 8);
+
+        charts.push({
+          id: 'chart_cat_' + cat.col.name,
+          title: `Répartition par ${cat.col.name}`,
+          chart_type: 'bar',
+          x_axis: cat.col.name,
+          y_axis: [primaryMetric.col.name],
+          description: `Consolidation des données par ${cat.col.name}`,
+          categorical_data: catData,
+        });
+      }
+
+      if (dateCol && primaryMetric) {
+        const tempMap = new Map<string, { value: number; count: number }>();
+        for (const r of filtered) {
+          const rawDate = String(r.values[dateCol.idx] ?? '');
+          const period = rawDate.slice(0, 7) || 'N/A';
+          const val = Number(r.values[primaryMetric.idx]) || 0;
+          const curr = tempMap.get(period) || { value: 0, count: 0 };
+          tempMap.set(period, { value: curr.value + val, count: curr.count + 1 });
+        }
+        const tempSorted = Array.from(tempMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+        let prevVal: number | null = null;
+        const tempData = tempSorted.map(([period, d]) => {
+          const growth =
+            prevVal !== null && prevVal > 0 ? ((d.value - prevVal) / prevVal) * 100 : undefined;
+          prevVal = d.value;
+          return {
+            period,
+            value: d.value,
+            count: d.count,
+            growth_rate: growth !== undefined ? Math.round(growth * 10) / 10 : undefined,
+          };
+        });
+
+        charts.push({
+          id: 'chart_temp_' + dateCol.col.name,
+          title: `Évolution temporelle (${primaryMetric.col.name})`,
+          chart_type: 'line',
+          x_axis: dateCol.col.name,
+          y_axis: [primaryMetric.col.name],
+          description: 'Série chronologique consolidée',
+          temporal_data: tempData,
+        });
+      }
+
+      const insights: InsightItem[] = [
+        {
+          id: 'ins-qual',
+          title: `Intégrité des Données (${ds.name})`,
+          description: `Fichier analysé avec succès : ${ds.rows.length} lignes et ${ds.columns.length} colonnes typées.`,
+          insight_type: 'quality',
+          severity: 'success',
+          evidence_text: `Dataset ${ds.name} validé sans rejet.`,
+          recommendation: 'Le jeu de données est prêt pour le pilotage et le reporting.',
+          confidence_score: 1.0,
+          source_citation: ds.name,
+        },
+      ];
+
+      return {
+        project_id: pId,
+        total_rows: ds.rows.length,
         filtered_rows_count: filtered.length,
         active_filters: activeFilters,
-        kpis: [
-          {
-            id: 'kpi_total_records',
-            title: 'Volume Total',
-            value: filtered.length,
-            formatted_value: `${filtered.length} lignes`,
-            unit: 'enregistrements',
-            description: 'Nombre de lignes filtrées',
-            source_column: 'Total lignes',
-            formula_explanation: 'Comptage déterministe',
-          },
-          {
-            id: 'kpi_ca_total',
-            title: "Chiffre d'Affaires Total",
-            value: totalCA,
-            formatted_value: `${totalCA.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €`,
-            unit: '€',
-            description: 'Somme consolidée des ventes',
-            source_column: 'Chiffre_Affaires',
-            formula_explanation: 'Somme arithmétique de la colonne Chiffre_Affaires',
-          },
-          {
-            id: 'kpi_marge_total',
-            title: 'Marge Nette Consolidée',
-            value: totalMarge,
-            formatted_value: `${totalMarge.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €`,
-            unit: '€',
-            description: 'Marge brute réalisée sur les opérations',
-            source_column: 'Marge_Nette',
-            formula_explanation: 'Somme de la colonne Marge_Nette',
-          },
-          {
-            id: 'kpi_ca_mean',
-            title: 'Panier Moyen',
-            value: meanCA,
-            formatted_value: `${meanCA.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €`,
-            unit: '€',
-            description: 'Valeur moyenne par transaction',
-            source_column: 'Chiffre_Affaires',
-            formula_explanation: 'Total CA / Nombre de transactions',
-          },
-        ],
-        charts: [
-          {
-            id: 'chart_temporal',
-            title: 'Évolution Mensuelle du Chiffre d\'Affaires',
-            chart_type: 'area',
-            x_axis: 'Date_Vente',
-            y_axis: ['Chiffre_Affaires'],
-            description: 'Chronologie des revenus agrégés par mois.',
-            temporal_data: [
-              { period: '2024-01', value: 43400, count: 2, growth_rate: undefined },
-              { period: '2024-02', value: 35000, count: 2, growth_rate: -19.4 },
-              { period: '2024-03', value: 62000, count: 2, growth_rate: 77.1 },
-              { period: '2024-04', value: 25600, count: 2, growth_rate: -58.7 },
-              { period: '2024-05', value: 38000, count: 2, growth_rate: 48.4 },
-              { period: '2024-06', value: 47600, count: 2, growth_rate: 25.3 },
-              { period: '2024-07', value: 45000, count: 2, growth_rate: -5.5 },
-              { period: '2024-08', value: 33000, count: 2, growth_rate: -26.7 },
-              { period: '2024-09', value: 37400, count: 2, growth_rate: 13.3 },
-              { period: '2024-10', value: 57500, count: 2, growth_rate: 53.7 },
-              { period: '2024-11', value: 54000, count: 2, growth_rate: -6.1 },
-              { period: '2024-12', value: 95500, count: 2, growth_rate: 76.9 },
-            ],
-          },
-          {
-            id: 'chart_categories',
-            title: 'Répartition par Catégorie de Produit',
-            chart_type: 'bar',
-            x_axis: 'Categorie_Produit',
-            y_axis: ['Chiffre_Affaires'],
-            description: 'Contribution de chaque famille de produits au CA.',
-            categorical_data: [
-              { category: 'Logiciels SaaS', value: 270000, count: 10, percentage: 47.0 },
-              { category: 'Matériel IT', value: 172500, count: 8, percentage: 30.1 },
-              { category: 'Services & Conseil', value: 131500, count: 6, percentage: 22.9 },
-            ],
-          },
-          {
-            id: 'chart_regions',
-            title: 'Parts relatives par Région',
-            chart_type: 'donut',
-            x_axis: 'Region',
-            y_axis: ['Chiffre_Affaires'],
-            description: 'Répartition géographique des ventes.',
-            categorical_data: [
-              { category: 'Île-de-France', value: 244500, count: 10, percentage: 42.6 },
-              { category: 'Occitanie', value: 143500, count: 5, percentage: 25.0 },
-              { category: 'Auvergne-Rhône-Alpes', value: 101000, count: 5, percentage: 17.6 },
-              { category: 'Nouvelle-Aquitaine', value: 85000, count: 4, percentage: 14.8 },
-            ],
-          },
-        ],
-        insights: [
-          {
-            id: 'ins-1',
-            title: 'Pic d\'activité majeur en Décembre (+76.9%)',
-            description: 'Le mois de décembre 2024 concentre le plus fort chiffre d\'affaires de l\'année (95 500 €), avec un sursaut notable sur Cloud ERP Pro.',
-            insight_type: 'spike',
-            severity: 'success',
-            metric_involved: 'Chiffre_Affaires',
-            evidence_text: 'Variation calculée : +76.9% par rapport à Novembre 2024.',
-            recommendation: 'Anticiper les capacités de déploiement pour la clôture annuelle 2025.',
-            confidence_score: 1.0,
-            source_citation: 'Série chronologique Date_Vente (2024-12)',
-          },
-          {
-            id: 'ins-2',
-            title: 'Dominance du segment Logiciels SaaS (47% du CA)',
-            description: 'Les logiciels SaaS génèrent près de la moitié des revenus globaux avec un taux de marge brute de 34%.',
-            insight_type: 'pareto',
-            severity: 'info',
-            metric_involved: 'Categorie_Produit',
-            evidence_text: 'Total Logiciels SaaS : 270 000 € sur 574 000 € consolidés.',
-            recommendation: 'Continuer à développer les offres récurrentes à forte valeur ajoutée.',
-            confidence_score: 1.0,
-            source_citation: 'Agrégation Categorie_Produit',
-          },
-          {
-            id: 'ins-3',
-            title: 'Intégrité et Complétude Parfaites (100%)',
-            description: 'Aucune donnée manquante ni anomalie de format constatée sur les 24 enregistrements audités.',
-            insight_type: 'quality',
-            severity: 'success',
-            evidence_text: '0 cellules manquantes sur 168 contrôlées.',
-            recommendation: 'Jeu de données certifié propre pour reporting de direction.',
-            confidence_score: 1.0,
-            source_citation: 'Audit d\'intégrité global',
-          },
-        ],
-        correlation_matrix: [
-          { column_a: 'Quantite', column_b: 'Chiffre_Affaires', coefficient: 0.68 },
-          { column_a: 'Chiffre_Affaires', column_b: 'Marge_Nette', coefficient: 0.94 },
-        ],
+        kpis,
+        charts,
+        insights,
+        correlation_matrix: [],
         data_quality_score: 100.0,
-      };
-
-      return state as unknown as T;
+      } as unknown as T;
     }
 
     case 'ask_assistant': {
+      const pId = args?.projectId;
+      const ds = browserDatasets.get(pId);
       const q = (args?.query || '').toLowerCase();
-      let reply = `D'après l'analyse des données de la démo :\n- Le chiffre d'affaires consolidé est de 574 000,00 €.\n- Le segment principal est 'Logiciels SaaS' (47%).\n- Décembre a été le mois le plus dynamique (+76.9%).`;
-      if (q.includes('top')) {
-        reply = `Top 3 des catégories par contribution au Chiffre d'Affaires :\n1. **Logiciels SaaS** — 270 000,00 € (47.0%)\n2. **Matériel IT** — 172 500,00 € (30.1%)\n3. **Services & Conseil** — 131 500,00 € (22.9%)`;
-      } else if (q.includes('anomalie')) {
-        reply = `Aucune anomalie critique détectée. Tous les montants et dates respectent les bornes attendues et la complétude est de 100%.`;
-      }
+      let reply = ds
+        ? `Analyse déterministe pour le projet '${ds.name}' :\n- Volume total de données : ${ds.rows.length} lignes.\n- Nombre de colonnes : ${ds.columns.length}.`
+        : 'Aucune donnée associée à ce projet.';
 
       const msg: AssistantMessage = {
         role: 'assistant',
         content: reply,
-        sources: ["Fichier de démo : demo_commercial_performance.csv (24 lignes)"],
+        sources: [ds ? `Fichier analysé : ${ds.name}` : 'Aucune source'],
         is_deterministic: true,
         timestamp: new Date().toISOString(),
       };
@@ -354,21 +575,18 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
       return null as unknown as T;
 
     case 'export_project_report_html': {
-      const proj = browserProjects.find((p) => p.id === args?.projectId) || browserProjects[0];
-      const ds = browserDataset;
-      const cur = browserSettings.currency === 'XOF' || browserSettings.currency === 'XAF' ? 'FCFA' : browserSettings.currency;
-      
+      const pId = args?.projectId;
+      const proj = browserProjects.find((p) => p.id === pId) || browserProjects[0];
+      const ds = browserDatasets.get(pId);
+      const cur =
+        browserSettings.currency === 'XOF' || browserSettings.currency === 'XAF'
+          ? 'FCFA'
+          : browserSettings.currency;
+
       let kpisHtml = '';
       if (ds) {
-        const totalCA = ds.rows.reduce((acc, r) => acc + (Number(r.values[5]) || 0), 0);
-        const totalMarge = ds.rows.reduce((acc, r) => acc + (Number(r.values[6]) || 0), 0);
-        const meanCA = ds.rows.length ? totalCA / ds.rows.length : 0;
-        
         kpisHtml = `
           <div class="kpi-card"><div class="kpi-title">Volume Total</div><div class="kpi-value">${ds.rows.length} lignes</div><div class="kpi-desc">Total des transactions analysées</div></div>
-          <div class="kpi-card"><div class="kpi-title">Chiffre d'Affaires</div><div class="kpi-value">${totalCA.toLocaleString('fr-FR')} ${cur}</div><div class="kpi-desc">Somme consolidée des ventes</div></div>
-          <div class="kpi-card"><div class="kpi-title">Marge Nette</div><div class="kpi-value">${totalMarge.toLocaleString('fr-FR')} ${cur}</div><div class="kpi-desc">Marge globale certifiée</div></div>
-          <div class="kpi-card"><div class="kpi-title">Panier Moyen</div><div class="kpi-value">${meanCA.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${cur}</div><div class="kpi-desc">Moyenne par opération</div></div>
         `;
       }
 
@@ -398,10 +616,6 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         .kpi-title { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
         .kpi-value { font-size: 24px; font-weight: 800; color: #0f172a; }
         .kpi-desc { font-size: 12px; color: #64748b; margin-top: 8px; }
-        .insight-box { background: #f8fafc; padding: 18px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #e2e8f0; border-left: 4px solid #10b981; }
-        .insight-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
-        .insight-desc { font-size: 13.5px; color: #334155; margin-bottom: 8px; }
-        .insight-rec { font-size: 13px; color: #0369a1; background: #e0f2fe; padding: 10px; border-radius: 6px; }
         table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; background: #ffffff; border: 1px solid #e2e8f0; }
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
         th { background: #f1f5f9; color: #475569; font-weight: 700; font-size: 11.5px; text-transform: uppercase; }
@@ -428,19 +642,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
             ${kpisHtml}
         </div>
 
-        <div class="section-title">2. Analyses Déterministes & Recommandations</div>
-        <div class="insight-box">
-            <div class="insight-title">Pic d'activité majeur en Décembre (+76.9%)</div>
-            <div class="insight-desc">Le mois de décembre concentre le plus fort chiffre d'affaires de l'exercice avec un essor significatif du Cloud ERP Pro.</div>
-            <div class="insight-rec"><strong>Recommandation :</strong> Anticiper les capacités de déploiement pour la clôture annuelle.</div>
-        </div>
-        <div class="insight-box">
-            <div class="insight-title">Concentration de Pareto sur les Logiciels SaaS (47% du total)</div>
-            <div class="insight-desc">Le segment Logiciels SaaS représente la part dominante des revenus avec une forte marge contributive.</div>
-            <div class="insight-rec"><strong>Recommandation :</strong> Renforcer la fidélisation client et les extensions d'abonnements annuels.</div>
-        </div>
-
-        <div class="section-title">3. Échantillon des Données Validées</div>
+        <div class="section-title">2. Échantillon des Données Validées</div>
         <div style="overflow-x: auto;">
             <table>
                 <thead><tr>${headersHtml}</tr></thead>
@@ -457,9 +659,11 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
     }
 
     case 'export_dataset_csv': {
-      if (!browserDataset) return '' as unknown as T;
-      const headers = browserDataset.columns.map((c) => c.name).join(';');
-      const rows = browserDataset.rows.map((r) => r.values.map((v) => v ?? '').join(';')).join('\n');
+      const pId = args?.projectId;
+      const ds = browserDatasets.get(pId);
+      if (!ds) return '' as unknown as T;
+      const headers = ds.columns.map((c) => c.name).join(';');
+      const rows = ds.rows.map((r) => r.values.map((v) => v ?? '').join(';')).join('\n');
       return `${headers}\n${rows}` as unknown as T;
     }
 
@@ -481,8 +685,19 @@ export const api = {
   // Documents & Extraction
   listDocuments: (projectId: string) =>
     tauriInvoke<DocumentItem[]>('list_documents', { projectId }),
-  importAndExtractDocument: (projectId: string, filePath: string) =>
-    tauriInvoke<Dataset>('import_and_extract_document', { projectId, filePath }),
+  deleteDocument: (projectId: string, docId: string) =>
+    tauriInvoke<Dataset | null>('delete_document', { projectId, documentId: docId }),
+  importAndExtractDocument: (projectId: string, filePath: string, fileContent?: string) => {
+    if (fileContent) {
+      const fileName = filePath.split(/[/\\]/).pop() || 'document.csv';
+      return tauriInvoke<Dataset>('import_document_content', {
+        projectId,
+        fileName,
+        content: fileContent,
+      });
+    }
+    return tauriInvoke<Dataset>('import_and_extract_document', { projectId, filePath });
+  },
   getProjectDataset: (projectId: string) =>
     tauriInvoke<Dataset | null>('get_project_dataset', { projectId }),
   updateColumnMetadata: (projectId: string, columns: ColumnSchema[]) =>

@@ -104,6 +104,10 @@ export const App: React.FC = () => {
   const handleCreateProject = async (name: string, description?: string) => {
     const newProj = await api.createProject(name, description);
     setProjects((prev) => [newProj, ...prev]);
+    // Clear previous project data from memory
+    setDocuments([]);
+    setDataset(null);
+    setDashboardState(null);
     await selectProject(newProj);
     setActiveTab('documents');
   };
@@ -136,16 +140,20 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleImportFile = async (filePath: string) => {
+  const handleImportFile = async (filePath: string, fileContent?: string) => {
     if (!activeProject) return;
     setIsProcessing(true);
     try {
-      const newDataset = await api.importAndExtractDocument(activeProject.id, filePath);
+      const newDataset = await api.importAndExtractDocument(activeProject.id, filePath, fileContent);
       setDataset(newDataset);
       const docs = await api.listDocuments(activeProject.id);
       setDocuments(docs);
-      const state = await api.runAnalysis(activeProject.id, []);
-      setDashboardState(state);
+      if (newDataset && newDataset.rows.length > 0) {
+        const state = await api.runAnalysis(activeProject.id, []);
+        setDashboardState(state);
+      } else {
+        setDashboardState(null);
+      }
       setActiveTab('preview');
     } finally {
       setIsProcessing(false);
@@ -154,8 +162,21 @@ export const App: React.FC = () => {
 
   const handleDeleteDocument = async (docId: string) => {
     if (!activeProject) return;
-    const updated = documents.filter((d) => d.id !== docId);
-    setDocuments(updated);
+    setIsProcessing(true);
+    try {
+      const remainingDataset = await api.deleteDocument(activeProject.id, docId);
+      const docs = await api.listDocuments(activeProject.id);
+      setDocuments(docs);
+      setDataset(remainingDataset);
+      if (remainingDataset && remainingDataset.rows.length > 0) {
+        const state = await api.runAnalysis(activeProject.id, []);
+        setDashboardState(state);
+      } else {
+        setDashboardState(null);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSaveSchema = async (columns: ColumnSchema[]) => {
@@ -270,6 +291,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'preview' && (
             <PreviewView
+              key={dataset?.id || 'empty-preview'}
               dataset={dataset}
               onSaveSchema={handleSaveSchema}
               onProceedToDashboard={() => setActiveTab('dashboard')}
@@ -278,6 +300,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'dashboard' && (
             <DashboardView
+              key={dataset?.id || 'empty-dashboard'}
               project={activeProject}
               dataset={dataset}
               dashboardState={dashboardState}
@@ -311,6 +334,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'explorer' && (
             <ExplorerView
+              key={dataset?.id || 'empty-explorer'}
               dataset={dataset}
               onExportCsv={async () => {
                 if (activeProject) {
@@ -328,6 +352,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'reports' && (
             <ReportsView
+              key={dataset?.id || 'empty-reports'}
               project={activeProject}
               dataset={dataset}
               dashboardState={dashboardState}

@@ -29,6 +29,8 @@ pub fn run() {
             commands::load_demo_project,
             commands::list_documents,
             commands::import_and_extract_document,
+            commands::import_document_content,
+            commands::delete_document,
             commands::get_project_dataset,
             commands::update_column_metadata,
             commands::run_analysis,

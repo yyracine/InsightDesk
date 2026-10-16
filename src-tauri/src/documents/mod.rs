@@ -82,3 +82,50 @@ pub fn extract_document_to_dataset(
         created_at: Utc::now().to_rfc3339(),
     })
 }
+
+pub fn extract_content_to_dataset(
+    content: &str,
+    file_name: &str,
+    project_id: &str,
+    document_id: Option<&str>,
+) -> Result<Dataset> {
+    let ext = file_name
+        .split('.')
+        .last()
+        .unwrap_or("")
+        .to_lowercase();
+
+    let (raw_columns, raw_rows, dataset_type) = if ext == "json" || ext == "txt" || ext == "md" || ext == "markdown" {
+        let res = text::parse_text_or_json_str(content, file_name)?;
+        (res.columns, res.rows, "text_summary".to_string())
+    } else {
+        let res = csv::parse_csv_str(content, file_name)?;
+        (res.columns, res.rows, "tabular".to_string())
+    };
+
+    let sample_limit = raw_rows.len().min(100);
+    let sample_values: Vec<Vec<serde_json::Value>> = raw_rows
+        .iter()
+        .take(sample_limit)
+        .map(|r| r.values.clone())
+        .collect();
+
+    let columns = infer_and_normalize_columns(&raw_columns, &sample_values, raw_rows.len());
+    let cleaned_rows = clean_and_normalize_rows(&columns, raw_rows);
+
+    let row_count = cleaned_rows.len();
+    let col_count = columns.len();
+
+    Ok(Dataset {
+        id: Uuid::new_v4().to_string(),
+        project_id: project_id.to_string(),
+        document_id: document_id.map(|s| s.to_string()),
+        name: file_name.to_string(),
+        dataset_type,
+        row_count,
+        column_count: col_count,
+        columns,
+        rows: cleaned_rows,
+        created_at: Utc::now().to_rfc3339(),
+    })
+}

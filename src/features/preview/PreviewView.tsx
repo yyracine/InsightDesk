@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Columns,
   CheckCircle2,
@@ -44,6 +44,13 @@ export const PreviewView: React.FC<PreviewViewProps> = ({
   const [columns, setColumns] = useState<ColumnSchema[]>(dataset.columns);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (dataset) {
+      setColumns(dataset.columns);
+      setHasChanges(false);
+    }
+  }, [dataset?.id, dataset?.name, dataset?.row_count]);
 
   const handleTypeChange = (colIndex: number, newType: InferredColumnType) => {
     const updated = [...columns];

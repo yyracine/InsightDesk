@@ -21,15 +21,19 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
         .unwrap_or("document.txt")
         .to_string();
 
-    let ext = path
-        .extension()
-        .and_then(|s| s.to_str())
+    parse_text_or_json_str(&content, &file_name)
+}
+
+pub fn parse_text_or_json_str(content: &str, file_name: &str) -> Result<TextExtractResult> {
+    let ext = file_name
+        .split('.')
+        .last()
         .unwrap_or("")
         .to_lowercase();
 
     // 1. Try JSON parsing
     if ext == "json" {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(content) {
             if let Some(arr) = val.as_array() {
                 if !arr.is_empty() && arr[0].is_object() {
                     let mut keys = Vec::new();
@@ -57,7 +61,7 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
                         rows.push(DataRow {
                             row_index: idx,
                             values: row_vals,
-                            source_file: file_name.clone(),
+                            source_file: file_name.to_string(),
                             source_location: Some(format!("Élément JSON {}", idx + 1)),
                         });
                     }
@@ -79,7 +83,7 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
                     return Ok(TextExtractResult {
                         columns,
                         rows,
-                        raw_text: content,
+                        raw_text: content.to_string(),
                     });
                 }
             }
@@ -130,7 +134,7 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
             rows.push(DataRow {
                 row_index: idx,
                 values: row_vals,
-                source_file: file_name.clone(),
+                source_file: file_name.to_string(),
                 source_location: Some(format!("Tableau MD - Ligne {}", idx + 1)),
             });
         }
@@ -152,7 +156,7 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
         return Ok(TextExtractResult {
             columns,
             rows,
-            raw_text: content,
+            raw_text: content.to_string(),
         });
     }
 
@@ -179,7 +183,7 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
                 serde_json::Value::String(l.to_string()),
                 serde_json::Value::from(word_count),
             ],
-            source_file: file_name.clone(),
+            source_file: file_name.to_string(),
             source_location: Some(format!("Ligne {}", idx + 1)),
         });
     }
@@ -201,6 +205,6 @@ pub fn parse_text_or_json_file(path: &Path) -> Result<TextExtractResult> {
     Ok(TextExtractResult {
         columns,
         rows,
-        raw_text: content,
+        raw_text: content.to_string(),
     })
 }

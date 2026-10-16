@@ -2,7 +2,7 @@ use crate::ai::answer_query;
 use crate::analytics::execute_analysis;
 use crate::database::{DbPool, Repository};
 use crate::demo_data::create_demo_sales_project;
-use crate::documents::{extract_document_to_dataset, metadata};
+use crate::documents::{extract_content_to_dataset, extract_document_to_dataset, metadata};
 use crate::export::{export_dataset_to_csv, generate_html_report};
 use crate::models::{
     AppSettings, AssistantMessage, ColumnSchema, DashboardState, DataFilter, Dataset, DocumentItem,
@@ -137,6 +137,61 @@ pub fn import_and_extract_document(
     Repository::save_dataset(&conn, &dataset).map_err(|e| e.to_string())?;
 
     Ok(dataset)
+}
+
+#[tauri::command]
+pub fn import_document_content(
+    db: State<DbPool>,
+    project_id: String,
+    file_name: String,
+    content: String,
+) -> Result<Dataset, String> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let file_hash = format!("{:x}", hasher.finalize());
+
+    let ext = file_name.split('.').last().unwrap_or("csv").to_lowercase();
+    let size = content.len() as u64;
+
+    let doc_id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    let doc_item = DocumentItem {
+        id: doc_id.clone(),
+        project_id: project_id.clone(),
+        original_name: file_name.clone(),
+        storage_path: format!("upload://{}", file_name),
+        file_hash,
+        file_format: ext,
+        file_size: size,
+        import_status: "imported".to_string(),
+        extraction_status: "extracted".to_string(),
+        error_message: None,
+        metadata_json: "{}".to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let dataset = extract_content_to_dataset(&content, &file_name, &project_id, Some(&doc_id))
+        .map_err(|e| format!("Erreur lors de l'extraction : {}", e))?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    Repository::insert_document(&conn, &doc_item).map_err(|e| e.to_string())?;
+    Repository::save_dataset(&conn, &dataset).map_err(|e| e.to_string())?;
+
+    Ok(dataset)
+}
+
+#[tauri::command]
+pub fn delete_document(
+    db: State<DbPool>,
+    project_id: String,
+    document_id: String,
+) -> Result<Option<Dataset>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    Repository::delete_document(&conn, &document_id).map_err(|e| e.to_string())?;
+    Repository::get_dataset_by_project(&conn, &project_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

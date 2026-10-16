@@ -18,7 +18,7 @@ import { DocumentItem, Project } from '../../types';
 interface DocumentsViewProps {
   project: Project | null;
   documents: DocumentItem[];
-  onImportFile: (filePath: string) => Promise<void>;
+  onImportFile: (filePath: string, fileContent?: string) => Promise<void>;
   onDeleteDocument: (docId: string) => Promise<void>;
   onGoToPreview: () => void;
   isProcessing: boolean;
@@ -52,10 +52,21 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   const processFile = async (file: globalThis.File) => {
     setErrorMsg(null);
     try {
-      // In Tauri desktop apps (Webview2), file.path provides the absolute local file path
       const path = (file as any).path || (file as any).webkitRelativePath || file.name;
       setFilePathInput(path);
-      await onImportFile(path);
+
+      let content: string | undefined = undefined;
+      const isTextFile = /\.(csv|json|txt|md|tsv)$/i.test(file.name);
+      if (isTextFile) {
+        try {
+          content = await file.text();
+        } catch (e) {
+          console.warn('Could not read file text directly:', e);
+        }
+      }
+
+      await onImportFile(path, content);
+      setFilePathInput('');
     } catch (err: any) {
       setErrorMsg(err?.message || String(err));
     }
