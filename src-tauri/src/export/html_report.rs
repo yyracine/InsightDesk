@@ -242,28 +242,6 @@ pub fn generate_html_report(
         ));
     }
 
-    // 5. Data Sample Table HTML
-    let mut table_headers_html = String::new();
-    for col in &dataset.columns {
-        table_headers_html.push_str(&format!("<th>{}</th>", col.name));
-    }
-
-    let mut table_rows_html = String::new();
-    for r in dataset.rows.iter().take(25) {
-        table_rows_html.push_str("<tr>");
-        for v in &r.values {
-            let s = match v {
-                serde_json::Value::Null => "<span style='color:#9ca3af;'>N/A</span>".to_string(),
-                serde_json::Value::String(st) => st.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                serde_json::Value::Bool(b) => (if *b { "Oui" } else { "Non" }).to_string(),
-                _ => "-".to_string(),
-            };
-            table_rows_html.push_str(&format!("<td>{}</td>", s));
-        }
-        table_rows_html.push_str("</tr>");
-    }
-
     format!(
         r#"<!DOCTYPE html>
 <html lang="fr">
@@ -448,18 +426,6 @@ pub fn generate_html_report(
             {insights}
         </div>
 
-        <div class="section-title">5. Échantillon des Données Validées (25 premières lignes)</div>
-        <div style="overflow-x: auto;">
-            <table>
-                <thead>
-                    <tr>{headers}</tr>
-                </thead>
-                <tbody>
-                    {rows}
-                </tbody>
-            </table>
-        </div>
-
         <div class="footer">
             Rapport produit par InsightDesk • Moteur de calcul déterministe certifié • Traitement 100% local.
         </div>
@@ -478,9 +444,7 @@ pub fn generate_html_report(
         categorical_section = categorical_html,
         correlation_section = correlation_html,
         crosstab_section = crosstab_html,
-        insights = insights_html,
-        headers = table_headers_html,
-        rows = table_rows_html
+        insights = insights_html
     )
 }
 

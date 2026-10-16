@@ -638,41 +638,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 8: Data Sample Table */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-blue-400" />
-            <span>8. Échantillon des Données Validées (25 premières lignes)</span>
-          </h3>
-
-          <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-semibold">
-                  <th className="py-2 px-3 text-slate-500">#</th>
-                  {dataset.columns.map((c) => (
-                    <th key={c.name} className="py-2 px-3">
-                      {c.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
-                {dataset.rows.slice(0, 25).map((r, idx) => (
-                  <tr key={idx} className="hover:bg-slate-900/40 text-slate-300">
-                    <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
-                    {r.values.map((v, cIdx) => (
-                      <td key={cIdx} className="py-2 px-3 truncate max-w-xs">
-                        {v === null ? <span className="text-slate-600">null</span> : String(v)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         {/* Certification Footer */}
         <div className="pt-6 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center space-x-1.5 text-emerald-400">

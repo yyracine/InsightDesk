@@ -1080,15 +1080,6 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
         </svg>
       `;
 
-      let rowsHtml = '';
-      if (ds) {
-        for (const r of ds.rows.slice(0, 25)) {
-          rowsHtml += `<tr>${r.values.map((v) => `<td>${v ?? '-'}</td>`).join('')}</tr>`;
-        }
-      }
-
-      const headersHtml = ds ? ds.columns.map((c) => `<th>${c.name}</th>`).join('') : '';
-
       return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -1186,14 +1177,6 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, any>): Promise<T
                 <div style="font-size:11.5px; font-family:monospace; background:#f1f5f9; padding:6px 10px; border-radius:6px; color:#334155;">Preuve : Progression de 21 000 ${cur} (2024-01) à 27 000 ${cur} (2024-12).</div>
                 <div style="font-size:12px; color:#1d4ed8; background:#eff6ff; padding:8px 12px; border-radius:6px; margin-top:8px;"><strong>Recommandation :</strong> Consolider le calendrier commercial pour stabiliser cette trajectoire ascendante.</div>
             </div>
-        </div>
-
-        <div class="section-title">5. Échantillon des Données Validées (25 premières lignes)</div>
-        <div style="overflow-x: auto;">
-            <table>
-                <thead><tr>${headersHtml}</tr></thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
         </div>
 
         <div class="footer">
